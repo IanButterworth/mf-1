@@ -40,6 +40,21 @@ changing anything.
   Faithful path. If a sound is out of the FM-1's reach, say so and use Extended for the extra.
 - The effect DSP is not published. The six effects are generic designs fitted to the published
   CC ranges and the community's measurements; update them when better measurements appear.
+- Bank E (presets 129-160) is an Extended-mode extra. Faithful mode has the FM-1's 128 presets,
+  and the M-VAVE vendor protocol and MIDI program changes only ever address those 128.
+
+## Voicing patches and songs
+
+- Shape sounds only with what a real FM-1 has: DX7 voice parameters, its six effects, ENV,
+  mono/poly and glide. Remember that `fm1Quirks` changes what some parameters do (detune is about
+  2.8 cents a step on V15, feedback is weaker); say in the patch comment when a patch relies on it.
+- When matching a recording, measure two things: the long-term 1/3-octave spectrum and how
+  brightness and level change over a held note. An averaged spectrum alone hid a decaying,
+  mallet-like strike in RIGHTPLACE. The write-up of that process:
+  https://claude.ai/artifact/2CMWHoXnZFVhMnmpkKdhbH
+- Built-in songs (`songs.cc`) may contain chord parts and arrangements, not note-for-note
+  transcriptions. Never commit copyrighted MIDI files or recordings. Users add their own MIDI
+  files, and a file named like a built-in song replaces its notes.
 
 ## Keeping up with the community
 
@@ -86,13 +101,16 @@ Licences matter when reading community code:
   - `synth.*`: the audio-thread synth (voices, mono and glide, ENV, arp, sequencer, clock,
     output stage).
   - `fx.*`: the effect chain.
+  - `songs.*`: built-in songs with their voices; `midifile.*`: Standard MIDI File reading.
   - `engine.cc`: the model, persistence, MIDI and SysEx handling, and the C API in
     `include/MF1Core.h`.
   - `platform_*`: CoreAudio and CoreMIDI.
 - `Sources/MF1` (SwiftUI and AppKit): the panel, laid out in millimetres from a top-down photo;
   the 240x240 screen (`ScreenView`, with `ScreenLayout` shared by drawing and clicks); the device
-  state machine (`DeviceModel`); the app, window and menus.
-- `Sources/mf1-render`: headless checks, benchmark and WAV rendering through the offline C API.
+  state machine (`DeviceModel`); the app, window and menus; `Engine.swift` has the Swift helpers,
+  the song library and the audio output list.
+- `Sources/mf1-render`: headless checks (`main.cc`, `tests_engine.cc`), benchmark and WAV
+  rendering through the offline C API.
 - `docs/research/`: the specs the emulation is built from.
 
 ## Build and test
@@ -106,8 +124,42 @@ MF1_LATENCY_LOG=1 build/MF-1.app/Contents/MacOS/MF-1          # per key latency 
 build/MF-1.app/Contents/MacOS/MF-1 --snapshot out.png fx      # offscreen panel render
 ```
 
-When testing the running app, mute MASTER first, so test notes don't play aloud on the user's
-speakers or headphones.
+Other `mf1-render` modes: `wav <preset> <out> [note]`, `song <n> <out> [s]`,
+`songenv <n>` (envelope of a song's voice), `midi <file> <voice song> <out> [s]` and
+`midi-extended …` (stereo, Extended mode on).
+
+- When testing the running app, mute MASTER first (drag it down), so test notes don't play aloud
+  on the user's speakers or headphones. Put it back afterwards.
+- Ian's machine has small helper tools in `~/Documents/GitHub/mf-1-ref/tools/` (not in the repo):
+  find the window, click or drag at a point on the panel, press a Mac key, hold a MIDI note, and
+  listen to the MIDI port. Reference photos, the manual and the recording are in that folder too.
+- Offline tests render in 64 sample blocks when they compare against the scope or block timing;
+  other chunk sizes leave the block position out of step.
+- The saved state (`~/Library/Application Support/MF-1/state.bin`) is the user's data. Before
+  changing its format, back it up, bump `kStateVersion`, and migrate the older version on load;
+  never let an older file become unreadable. Unreadable files are kept aside, never overwritten.
+
+## Releases
+
+1. Bump `VERSION` in its own commit, push, and run the tests.
+2. `scripts/make-dmg.sh` builds a universal, ad-hoc signed app into `build/MF-1-<version>.dmg`.
+   Mount it and check the architectures, version and signature.
+3. Tag `v<version>` on the bump commit, then `gh release create` with the DMG and notes that start
+   with the `Claude:` preface. Download the asset back and compare its SHA-256.
+
+There is no Developer ID certificate, so releases are not notarised; the README and the notes
+tell users to right-click › Open on first launch.
+
+## UI pitfalls
+
+- Menu settings must use the `applying(_:_:)` bindings in `MF1App.swift`. `.onChange` on a menu
+  item runs only when the menus are next rebuilt, one change late.
+- The App scene must not observe `DeviceModel`, which publishes often. LEDs and the screen
+  redraw through `LedClock`/`Ticking`, and only when something visible changes; anything a
+  `Ticking` view draws must be one of its inputs, or SwiftUI skips the redraw.
+- Fonts are registered in the App's `init`, before any view draws.
+- The panel is an AppKit `PanelWindow` owned by the app delegate, so it can be borderless and
+  still take keyboard focus. The SwiftUI scene is a hidden menu bar extra that only carries menus.
 
 ## Conventions
 
