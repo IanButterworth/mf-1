@@ -43,7 +43,7 @@ struct Controllers {
   // Extra log2 Q24 pitch shared by all voices, e.g. master tune.
   int32_t masterTune = 0;
   // Reproduce the measured deviations of FM-1 firmware V15 from msfa:
-  // wider detune, weaker feedback, slower pitch EG, LFO depth tables.
+  // wider detune, weaker feedback, LFO depth tables.
   bool fm1Quirks = true;
 };
 

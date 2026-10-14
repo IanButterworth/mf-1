@@ -65,21 +65,29 @@ class FxChain {
   // Filter: topology preserving state variable filter per channel.
   float svfIc1_ = 0, svfIc2_ = 0;
   Smoothed cutoff_, q_;
+  // Cutoff and Q the coefficients were last computed for.
+  float filterC_ = -1, filterQ_ = -1;
+  float filterK_ = 0, filterA1_ = 0, filterA2_ = 0, filterA3_ = 0;
   // Distortion
   float toneState_ = 0;
   // Chorus
   std::vector<float> chorusBuf_;
   int chorusPos_ = 0;
   double chorusPhase_ = 0;
+  float chorusDelay_[2] = {};
+  bool chorusReady_ = false;
   // Phaser
   float apState_[6] = {};
   float phaserFb_ = 0;
   double phaserPhase_ = 0;
+  float phaserCoef_ = 0;
+  bool phaserReady_ = false;
   // Delay
   std::vector<float> delayBuf_;
   int delayPos_ = 0;
   Smoothed delayTime_;
   float delayDamp_ = 0;
+  float delayDampCoef_ = 0.35f;
   // Reverb: 8 line feedback delay network with input diffusion.
   static constexpr int kLines = 8;
   std::vector<float> fdn_[kLines];
@@ -93,7 +101,7 @@ class FxChain {
   int predelayPos_ = 0;
   int predelayLen_ = 0;
   float fdnGain_[kLines] = {};
-  float reverbDampCoef_ = 0.3f;
+  float reverbDampCoef_ = 0.7f;
   int reverbTypeBuilt_ = -1;
   void buildReverb(int type);
   void runFilter(float* x, int n);

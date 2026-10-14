@@ -8,25 +8,54 @@ namespace mf1 {
 
 namespace {
 constexpr float kPi = 3.14159265358979f;
-
+// The LFOs and filter coefficients are updated once per this many samples.
+constexpr int kCtlBlock = 16;
 
 // Base lengths in ms for each reverb type; scaled by the sample rate.
 struct ReverbShape {
   float lines[8];
   float diffusers[4];
   float predelayMs;
-  float damping;  // one pole lowpass coefficient inside the loop
-  float minRt60, maxRt60;
+  float dampHz;   // cutoff of the one pole lowpass inside the loop
+  float rtScale;  // RT40 relative to Hall at the same decay
 };
 
 const ReverbShape kShapes[3] = {
-    // Room: short, dense, darker.
-    {{11.3f, 13.7f, 15.1f, 17.9f, 19.3f, 21.7f, 23.9f, 26.1f}, {1.7f, 2.9f, 4.1f, 5.3f}, 4, 0.45f, 0.2f, 2.5f},
+    // Room: short and dense.
+    {{11.3f, 13.7f, 15.1f, 17.9f, 19.3f, 21.7f, 23.9f, 26.1f}, {1.7f, 2.9f, 4.1f, 5.3f}, 4, 20000, 0.74f},
     // Hall: long lines, more predelay.
-    {{37.1f, 41.3f, 47.9f, 53.1f, 59.3f, 63.7f, 71.9f, 79.3f}, {3.1f, 4.7f, 7.3f, 9.7f}, 18, 0.3f, 0.6f, 8.f},
+    {{37.1f, 41.3f, 47.9f, 53.1f, 59.3f, 63.7f, 71.9f, 79.3f}, {3.1f, 4.7f, 7.3f, 9.7f}, 18, 17000, 1.f},
     // Plate: no predelay, bright, very diffuse.
-    {{17.3f, 19.9f, 23.3f, 27.1f, 29.9f, 33.7f, 37.3f, 41.9f}, {1.1f, 1.9f, 2.7f, 3.9f}, 0, 0.12f, 0.4f, 6.f},
+    {{17.3f, 19.9f, 23.3f, 27.1f, 29.9f, 33.7f, 37.3f, 41.9f}, {1.1f, 1.9f, 2.7f, 3.9f}, 0, 20000, 0.86f},
 };
+
+// Hall RT40 in seconds at decay 0, 5, 25, 50, 75 and 100, as measured on the FM-1.
+const float kDecayPoints[6] = {0, 5, 25, 50, 75, 100};
+const float kHallRt40[6] = {0.12f, 0.40f, 1.5f, 2.3f, 3.7f, 5.0f};
+
+float hallRt40(int decay) {
+  for (int i = 1; i < 6; i++) {
+    if (decay <= kDecayPoints[i]) {
+      float t = (decay - kDecayPoints[i - 1]) / (kDecayPoints[i] - kDecayPoints[i - 1]);
+      return kHallRt40[i - 1] + t * (kHallRt40[i] - kHallRt40[i - 1]);
+    }
+  }
+  return kHallRt40[5];
+}
+
+// The manual gives 0.8 s down to 0.1 s but not the curve, so take the plain linear map.
+double delaySeconds(int rate) { return 0.8 - 0.7 * rate / 100.0; }
+
+float onePoleCoef(double hz, double sr) { return (float)(1.0 - std::exp(-2.0 * M_PI * hz / sr)); }
+
+// Pade approximant of tanh: close enough for a soft clipper and much cheaper.
+inline float fastTanh(float x) {
+  x = std::max(-4.97f, std::min(4.97f, x));
+  float x2 = x * x;
+  float num = x * (135135.f + x2 * (17325.f + x2 * (378.f + x2)));
+  float den = 135135.f + x2 * (62370.f + x2 * (3150.f + x2 * 28.f));
+  return num / den;
+}
 }  // namespace
 
 int FxParams::get(int cc) const {
@@ -139,7 +168,11 @@ void FxChain::prepare(double sampleRate) {
   buildReverb(p_.reverbType);
   cutoff_.value = cutoff_.target = p_.filterCutoff;
   q_.value = q_.target = p_.filterQ;
-  delayTime_.value = delayTime_.target = (float)(0.02 + p_.delayRate / 100.0 * 0.98) * (float)sr_;
+  delayTime_.value = delayTime_.target = (float)(delaySeconds(p_.delayRate) * sr_);
+  // Each echo loses treble; 3.3 kHz matches the original tuning at 48 kHz.
+  delayDampCoef_ = onePoleCoef(3300, sampleRate);
+  filterC_ = -1;
+  chorusReady_ = phaserReady_ = false;
 }
 
 void FxChain::buildReverb(int type) {
@@ -159,18 +192,23 @@ void FxChain::buildReverb(int type) {
   predelayLen_ = std::max(1, (int)(s.predelayMs * scale));
   predelayPos_ = 0;
   std::fill(predelay_.begin(), predelay_.end(), 0.f);
-  reverbDampCoef_ = s.damping;
+  reverbDampCoef_ = onePoleCoef(s.dampHz, sr_);
   reverbTypeBuilt_ = type;
   updateReverbGains();
 }
 
 void FxChain::updateReverbGains() {
   const ReverbShape& s = kShapes[std::max(0, reverbTypeBuilt_)];
-  float d = p_.reverbDecay / 100.f;
-  float rt60 = s.minRt60 + (s.maxRt60 - s.minRt60) * d * d;
+  float rt40 = hallRt40(p_.reverbDecay) * s.rtScale;
+  // The loop lowpass takes some level on every pass. Give it back at 1 kHz,
+  // so the midrange of the tail decays at the measured rate.
+  double a = reverbDampCoef_;
+  double w = 2 * M_PI * 1000.0 / sr_;
+  double dampGain = a / std::sqrt(1 - 2 * (1 - a) * std::cos(w) + (1 - a) * (1 - a));
   for (int i = 0; i < kLines; i++) {
     float seconds = fdnLen_[i] / (float)sr_;
-    fdnGain_[i] = std::pow(10.f, -3.f * seconds / rt60);
+    float g = std::pow(10.f, -2.f * seconds / rt40) / (float)dampGain;
+    fdnGain_[i] = std::min(g, 0.999f);
   }
 }
 
@@ -184,7 +222,7 @@ void FxChain::setParams(const FxParams& p) {
   }
   cutoff_.target = (float)p_.filterCutoff;
   q_.target = (float)p_.filterQ;
-  delayTime_.target = (float)(0.02 + p_.delayRate / 100.0 * 0.98) * (float)sr_;
+  delayTime_.target = (float)(delaySeconds(p_.delayRate) * sr_);
 }
 
 void FxChain::process(float* x, int frames) {
@@ -209,36 +247,53 @@ void FxChain::process(float* x, int frames) {
 
 void FxChain::runFilter(float* x, int n) {
   const float coef = smoothCoef_;
-  for (int i = 0; i < n; i++) {
-    float c = cutoff_.next(coef);
-    float qv = q_.next(coef);
-    float hz = 100.f * std::pow(200.f, c / 107.f);
-    hz = std::min(hz, (float)sr_ * 0.45f);
-    float g = std::tan(kPi * hz / (float)sr_);
-    // Damping: Q 0 is a gentle Butterworth-like slope, Q 100 rings hard.
-    float k = 1.414f - 1.35f * (qv / 100.f);
-    float a1 = 1.f / (1.f + g * (g + k));
-    float a2 = g * a1;
-    float a3 = g * a2;
-    float v0 = x[i];
-    float v3 = v0 - svfIc2_;
-    float v1 = a1 * svfIc1_ + a2 * v3;
-    float v2 = svfIc2_ + a2 * svfIc1_ + a3 * v3;
-    svfIc1_ = 2 * v1 - svfIc1_;
-    svfIc2_ = 2 * v2 - svfIc2_;
-    x[i] = p_.filterType == 0 ? v2 : p_.filterType == 1 ? v1 * k : v0 - k * v1 - v2;
+  for (int start = 0; start < n; start += kCtlBlock) {
+    int end = std::min(n, start + kCtlBlock);
+    for (int i = start; i < end; i++) {
+      cutoff_.next(coef);
+      q_.next(coef);
+    }
+    // Snap when close, so the coefficients stop being recomputed.
+    if (std::fabs(cutoff_.target - cutoff_.value) < 1e-3f) cutoff_.value = cutoff_.target;
+    if (std::fabs(q_.target - q_.value) < 1e-3f) q_.value = q_.target;
+    if (cutoff_.value != filterC_ || q_.value != filterQ_) {
+      filterC_ = cutoff_.value;
+      filterQ_ = q_.value;
+      float hz = 100.f * std::pow(200.f, filterC_ / 107.f);
+      hz = std::min(hz, (float)sr_ * 0.45f);
+      float g = std::tan(kPi * hz / (float)sr_);
+      // Damping: Q 0 is a gentle Butterworth-like slope, Q 100 rings hard.
+      filterK_ = 1.414f - 1.35f * (filterQ_ / 100.f);
+      filterA1_ = 1.f / (1.f + g * (g + filterK_));
+      filterA2_ = g * filterA1_;
+      filterA3_ = g * filterA2_;
+    }
+    const float k = filterK_, a1 = filterA1_, a2 = filterA2_, a3 = filterA3_;
+    for (int i = start; i < end; i++) {
+      float v0 = x[i];
+      float v3 = v0 - svfIc2_;
+      float v1 = a1 * svfIc1_ + a2 * v3;
+      float v2 = svfIc2_ + a2 * svfIc1_ + a3 * v3;
+      svfIc1_ = 2 * v1 - svfIc1_;
+      svfIc2_ = 2 * v2 - svfIc2_;
+      x[i] = p_.filterType == 0 ? v2 : p_.filterType == 1 ? v1 * k : v0 - k * v1 - v2;
+    }
   }
 }
 
 void FxChain::runDistortion(float* x, int n) {
-  float drive = 1.f + (p_.distGain / 100.f) * (p_.distGain / 100.f) * 60.f;
+  float g2 = (p_.distGain / 100.f) * (p_.distGain / 100.f);
+  float drive = 1.f + g2 * 60.f;
   float toneHz = 800.f * std::pow(2.f, p_.distTone / 100.f * 4.5f);
   float toneA = 1.f - std::exp(-2.f * kPi * toneHz / (float)sr_);
-  float level = (p_.distLevel / 100.f) * 1.4f;
-  float norm = 1.f / std::tanh(std::min(drive, 3.f));
+  // Quiet signals pass at about unity at any gain. Hard clipping loses
+  // loudness, so high gain gets up to 9.5 dB of makeup.
+  float out = (1.f + 2.f * g2) / drive;
+  // A plain linear trim: level 20 is about -14 dB, as measured.
+  float level = p_.distLevel / 100.f;
   float s = toneState_;
   for (int i = 0; i < n; i++) {
-    float y = std::tanh(x[i] * drive) * norm;
+    float y = fastTanh(x[i] * drive) * out;
     s += toneA * (y - s);
     x[i] = s * level;
   }
@@ -246,53 +301,85 @@ void FxChain::runDistortion(float* x, int n) {
 }
 
 void FxChain::runChorus(float* x, int n) {
-  double rate = 0.05 + (p_.chorusFreq / 100.0) * (p_.chorusFreq / 100.0) * 6.0;
+  // 0.1 to 1 Hz, per the FM-1+VA manual.
+  double rate = 0.1 * std::pow(10.0, p_.chorusFreq / 100.0);
   double inc = rate / sr_;
   float depth = (float)(0.0005 + p_.chorusDepth / 100.0 * 0.006) * (float)sr_;
   float base = 0.008f * (float)sr_;
   float mix = p_.chorusMix / 100.f;
   int len = (int)chorusBuf_.size();
-  for (int i = 0; i < n; i++) {
-    chorusBuf_[chorusPos_] = x[i];
-    float wet = 0;
-    // Two taps a quarter cycle apart thicken the mono signal.
-    for (int t = 0; t < 2; t++) {
-      double lfo = std::sin(2 * M_PI * (chorusPhase_ + t * 0.25));
-      float d = base + depth * 0.5f * (1.f + (float)lfo);
-      float rp = chorusPos_ - d;
-      while (rp < 0) rp += len;
-      int i0 = (int)rp;
-      float frac = rp - i0;
-      int i1 = (i0 + 1) % len;
-      wet += 0.5f * (chorusBuf_[i0] * (1 - frac) + chorusBuf_[i1] * frac);
-    }
-    x[i] = x[i] * (1 - mix * 0.5f) + wet * mix;
-    chorusPos_ = (chorusPos_ + 1) % len;
-    chorusPhase_ += inc;
+  // Two taps a quarter cycle apart thicken the mono signal.
+  auto tapDelay = [&](int t) {
+    return base + depth * 0.5f * (1.f + (float)std::sin(2 * M_PI * (chorusPhase_ + t * 0.25)));
+  };
+  if (!chorusReady_) {
+    chorusDelay_[0] = tapDelay(0);
+    chorusDelay_[1] = tapDelay(1);
+    chorusReady_ = true;
+  }
+  for (int start = 0; start < n; start += kCtlBlock) {
+    int end = std::min(n, start + kCtlBlock);
+    chorusPhase_ += inc * (end - start);
     if (chorusPhase_ >= 1) chorusPhase_ -= 1;
+    // The LFO is slow, so the delay can move in straight lines between control points.
+    float d[2], step[2];
+    for (int t = 0; t < 2; t++) {
+      d[t] = chorusDelay_[t];
+      chorusDelay_[t] = tapDelay(t);
+      step[t] = (chorusDelay_[t] - d[t]) / (end - start);
+    }
+    for (int i = start; i < end; i++) {
+      chorusBuf_[chorusPos_] = x[i];
+      float wet = 0;
+      for (int t = 0; t < 2; t++) {
+        d[t] += step[t];
+        float rp = chorusPos_ - d[t];
+        while (rp < 0) rp += len;
+        int i0 = (int)rp;
+        float frac = rp - i0;
+        int i1 = (i0 + 1) % len;
+        wet += 0.5f * (chorusBuf_[i0] * (1 - frac) + chorusBuf_[i1] * frac);
+      }
+      x[i] = x[i] * (1 - mix * 0.5f) + wet * mix;
+      chorusPos_ = (chorusPos_ + 1) % len;
+    }
   }
 }
 
 void FxChain::runPhaser(float* x, int n) {
-  double rate = 0.05 + (p_.phaserFreq / 100.0) * (p_.phaserFreq / 100.0) * 5.0;
+  // 0.5 to 6 Hz, per the FM-1+VA manual.
+  double rate = 0.5 * std::pow(12.0, p_.phaserFreq / 100.0);
   double inc = rate / sr_;
   float depth = p_.phaserDepth / 100.f;
   float mix = p_.phaserMix / 100.f;
-  for (int i = 0; i < n; i++) {
+  auto allpassCoef = [&]() {
     double lfo = 0.5 + 0.5 * std::sin(2 * M_PI * phaserPhase_);
     float hz = 200.f * std::pow(2.f, (float)lfo * depth * 5.f);
     float t = std::tan(kPi * hz / (float)sr_);
-    float a = (t - 1.f) / (t + 1.f);
-    float v = x[i] + phaserFb_ * 0.5f;
-    for (int s = 0; s < 6; s++) {
-      float y = a * v + apState_[s];
-      apState_[s] = v - a * y;
-      v = y;
-    }
-    phaserFb_ = v;
-    x[i] = x[i] * (1 - mix * 0.5f) + v * mix * 0.7f;
-    phaserPhase_ += inc;
+    return (t - 1.f) / (t + 1.f);
+  };
+  if (!phaserReady_) {
+    phaserCoef_ = allpassCoef();
+    phaserReady_ = true;
+  }
+  for (int start = 0; start < n; start += kCtlBlock) {
+    int end = std::min(n, start + kCtlBlock);
+    phaserPhase_ += inc * (end - start);
     if (phaserPhase_ >= 1) phaserPhase_ -= 1;
+    float a = phaserCoef_;
+    phaserCoef_ = allpassCoef();
+    float step = (phaserCoef_ - a) / (end - start);
+    for (int i = start; i < end; i++) {
+      a += step;
+      float v = x[i] + phaserFb_ * 0.5f;
+      for (int s = 0; s < 6; s++) {
+        float y = a * v + apState_[s];
+        apState_[s] = v - a * y;
+        v = y;
+      }
+      phaserFb_ = v;
+      x[i] = x[i] * (1 - mix * 0.5f) + v * mix * 0.7f;
+    }
   }
 }
 
@@ -308,7 +395,7 @@ void FxChain::runDelay(float* x, int n) {
     float frac = rp - i0;
     int i1 = (i0 + 1) % len;
     float tap = delayBuf_[i0] * (1 - frac) + delayBuf_[i1] * frac;
-    delayDamp_ += 0.35f * (tap - delayDamp_);
+    delayDamp_ += delayDampCoef_ * (tap - delayDamp_);
     delayBuf_[delayPos_] = x[i] + delayDamp_ * fb;
     x[i] += tap * mix;
     delayPos_ = (delayPos_ + 1) % len;
@@ -336,7 +423,7 @@ void FxChain::runReverb(float* x, int n) {
     float sum = 0;
     for (int k = 0; k < kLines; k++) {
       float o = fdn_[k][fdnPos_[k]];
-      fdnDamp_[k] += (1.f - damp) * (o - fdnDamp_[k]);
+      fdnDamp_[k] += damp * (o - fdnDamp_[k]);
       outs[k] = fdnDamp_[k] * fdnGain_[k];
       sum += outs[k];
     }
