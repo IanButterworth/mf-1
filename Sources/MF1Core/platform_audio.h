@@ -1,6 +1,8 @@
 #pragma once
+#include <atomic>
 #include <cstdint>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -16,9 +18,15 @@ class AudioOutput {
   ~AudioOutput();
   // Called with the device rate before the first render.
   void onPrepare(PrepareFn fn) { prepare_ = std::move(fn); }
-  // An empty UID follows the system default output.
+  // Called on a background queue when a chosen device disappears.
+  void onDeviceLost(std::function<void()> fn) { lost_ = std::move(fn); }
+  // An empty UID follows the system default output, as does a chosen
+  // device that is missing or cannot be selected.
   bool start(RenderFn fn, const std::string& deviceUID = "");
   void stop();
+  // True while the device renders: started, and called back recently or
+  // just started. Safe from any thread.
+  bool running() const;
   struct Device {
     std::string uid, name;
   };
@@ -33,10 +41,20 @@ class AudioOutput {
   Latency latency() const;
 
  private:
+  friend struct AudioListeners;
+  void deviceChanged();
+  void checkAlive();
   void* unit_ = nullptr;
   RenderFn fn_;
   PrepareFn prepare_;
+  std::function<void()> lost_;
   double sampleRate_ = 48000;
+  // Guards the unit against the listeners, which run on other threads.
+  std::mutex mu_;
+  // A chosen device, watched in case it is unplugged.
+  uint32_t watched_ = 0;
+  std::atomic<bool> started_{false};
+  std::atomic<uint64_t> startedAt_{0}, lastRender_{0};
 };
 
 }  // namespace mf1

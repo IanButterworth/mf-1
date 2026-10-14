@@ -26,4 +26,9 @@ class MidiIO {
   Impl* impl_ = nullptr;
 };
 
+// Encodes one message into event lists of at most maxListBytes (0 for the
+// size sending uses) and decodes them again with the input parser. For tests.
+std::vector<std::vector<uint8_t>> midiLoopback(const uint8_t* data, size_t len, size_t maxListBytes,
+                                               int* lists);
+
 }  // namespace mf1

@@ -1,11 +1,16 @@
 // The control side: the saved "flash" state, the edit buffer, MIDI and
 // SysEx handling, and the C interface. The audio thread only sees Commands.
 
+#include <fcntl.h>
+#include <unistd.h>
+
 #include <algorithm>
 #include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -68,15 +73,36 @@ struct Engine {
   std::vector<std::vector<uint8_t>> offlineOut;
   std::string outputUID;
 
-  bool startAudio() {
-    bool ok = audio.start(
+  bool startAudio(const std::string& uid) {
+    return audio.start(
         [this](float* l, float* r, uint32_t n) {
           synth.render(l, (int)n);
           if (r) memcpy(r, l, sizeof(float) * n);
         },
-        outputUID);
-    audioRunning = ok;
-    return ok;
+        uid);
+  }
+
+  // Commands sent while no device rendered were dropped, so the synth is
+  // brought back in line with the model after a restart.
+  void restartAudio(const std::string& uid) {
+    audio.stop();
+    if (startAudio(uid)) resync();
+  }
+
+  void resync() {
+    Preset keep = edit;
+    bool wasDirty = dirty;
+    int mutes = opMutes;
+    pushAll();
+    if (wasDirty) {
+      edit = keep;
+      dirty = true;
+      pushEdit();
+    }
+    if (mutes) {
+      opMutes = mutes;
+      send(Command(Command::MuteOps, opMutes));
+    }
   }
   std::thread noteThread;
 
@@ -88,16 +114,13 @@ struct Engine {
   }
   std::atomic<bool> running{false};
 
-  // True once the audio unit renders; the queue is only drained then.
-  std::atomic<bool> audioRunning{false};
-
   void send(Command c) {
     c.stamp = mach_absolute_time();
     std::lock_guard<std::mutex> g(sendLock);
     // Wait at most about 100 ms for the audio thread to make room, and drop
-    // the command if there is no audio thread at all.
+    // the command if the device has stopped rendering.
     for (int tries = 0; !synth.uiQueue.push(c); tries++) {
-      if (!audioRunning.load() || tries > 500) return;
+      if (!audio.running() || tries > 500) return;
       std::this_thread::sleep_for(std::chrono::microseconds(200));
     }
   }
@@ -149,7 +172,7 @@ struct Engine {
 
   // Follow preset switches the sequencer made on the audio thread.
   void syncFromSynth() {
-    uint32_t s = synth.presetSwitches.load(std::memory_order_relaxed);
+    uint32_t s = synth.presetSwitches.load(std::memory_order_acquire);
     if (s != seenSwitches) {
       seenSwitches = s;
       current = synth.currentPreset.load(std::memory_order_relaxed);
@@ -162,22 +185,38 @@ struct Engine {
 
   // ---------------------------------------------------------------- disk
 
-  static void writePreset(FILE* f, const Preset& p) {
-    fwrite(p.voice, 1, kVoiceSize, f);
+  template <typename T>
+  static void put(std::vector<uint8_t>& out, const T& v) {
+    auto* b = reinterpret_cast<const uint8_t*>(&v);
+    out.insert(out.end(), b, b + sizeof(T));
+  }
+
+  struct Reader {
+    const uint8_t* p;
+    size_t left;
+    bool take(void* dst, size_t n) {
+      if (n > left) return false;
+      memcpy(dst, p, n);
+      p += n;
+      left -= n;
+      return true;
+    }
+  };
+
+  static void writePreset(std::vector<uint8_t>& out, const Preset& p) {
+    out.insert(out.end(), p.voice, p.voice + kVoiceSize);
     int32_t fx[24 + kFxCount];
     for (int i = 0; i < 24; i++) fx[i] = i == 3 ? p.fx.filterQ : p.fx.get(i);
     for (int i = 0; i < kFxCount; i++) fx[24 + i] = p.fx.order[i];
-    fwrite(fx, sizeof(fx), 1, f);
+    put(out, fx);
     uint8_t extra[6] = {p.mono, p.envOn, p.env[0], p.env[1], p.env[2], p.env[3]};
-    fwrite(extra, 1, sizeof(extra), f);
+    put(out, extra);
   }
 
-  static bool readPreset(FILE* f, Preset& p) {
+  static bool readPreset(Reader& r, Preset& p) {
     int32_t fx[24 + kFxCount];
     uint8_t extra[6];
-    if (fread(p.voice, 1, kVoiceSize, f) != kVoiceSize) return false;
-    if (fread(fx, sizeof(fx), 1, f) != 1) return false;
-    if (fread(extra, 1, sizeof(extra), f) != sizeof(extra)) return false;
+    if (!r.take(p.voice, kVoiceSize) || !r.take(fx, sizeof(fx)) || !r.take(extra, sizeof(extra))) return false;
     for (int i = 0; i < 24; i++) {
       if (i == 3)
         p.fx.filterQ = std::max(0, std::min(100, (int)fx[i]));
@@ -202,23 +241,69 @@ struct Engine {
 
   std::string statePath() const { return stateDir + "/state.bin"; }
 
-  void saveState() {
-    if (stateDir.empty()) return;
-    std::string tmp = statePath() + ".tmp";
-    FILE* f = fopen(tmp.c_str(), "wb");
-    if (!f) return;
+  // Set when a state file could not be read and could not be moved aside
+  // either; saving would then overwrite it.
+  bool saveBlocked = false;
+  // Pattern edits from recording are written by the note thread a little
+  // later, so a burst of notes costs one write.
+  std::atomic<bool> saveDue{false};
+  uint64_t saveSeq = 0;
+  std::mutex diskLock;
+  uint64_t writtenSeq = 0;
+
+  std::vector<uint8_t> serializeState() {
+    std::vector<uint8_t> out;
     uint32_t head[3] = {kStateMagic, kStateVersion, (uint32_t)sizeof(SeqPattern)};
-    fwrite(head, sizeof(head), 1, f);
-    for (auto& p : bank) writePreset(f, p);
-    for (auto& p : imported) writePreset(f, p);
+    put(out, head);
+    for (auto& p : bank) writePreset(out, p);
+    for (auto& p : imported) writePreset(out, p);
     int32_t g[16] = {globals.midiChannel, globals.fxChannel, globals.bendUp,     globals.bendDown,
                      globals.keyVelocity, globals.glideMode, globals.glideTime, globals.masterVolume,
                      globals.tempo,       globals.fm1Quirks, current,           transpose,
                      haveFactory,         0,                 0,                 0};
-    fwrite(g, sizeof(g), 1, f);
-    fwrite(patterns, sizeof(patterns), 1, f);
-    fclose(f);
-    rename(tmp.c_str(), statePath().c_str());
+    put(out, g);
+    put(out, patterns);
+    return out;
+  }
+
+  // Writes a snapshot through a temporary file, so a failed write leaves
+  // the previous state in place. Older snapshots than the one on disk are
+  // skipped, as the note thread writes without the engine lock.
+  bool writeState(const std::vector<uint8_t>& data, uint64_t seq) {
+    std::lock_guard<std::mutex> g(diskLock);
+    if (seq <= writtenSeq) return true;
+    std::string tmp = statePath() + ".tmp";
+    FILE* f = fopen(tmp.c_str(), "wb");
+    if (!f) return false;
+    bool ok = fwrite(data.data(), 1, data.size(), f) == data.size();
+    ok = fflush(f) == 0 && ok;
+    ok = fsync(fileno(f)) == 0 && ok;
+    ok = fclose(f) == 0 && ok;
+    if (!ok || rename(tmp.c_str(), statePath().c_str()) != 0) {
+      unlink(tmp.c_str());
+      return false;
+    }
+    int dir = open(stateDir.c_str(), O_RDONLY);
+    if (dir >= 0) {
+      fsync(dir);
+      close(dir);
+    }
+    writtenSeq = seq;
+    return true;
+  }
+
+  bool saveState() {
+    saveDue = false;
+    if (stateDir.empty() || saveBlocked) return false;
+    return writeState(serializeState(), ++saveSeq);
+  }
+
+  void saveSoon() {
+    if (!stateDir.empty()) saveDue = true;
+  }
+
+  void flushSave() {
+    if (saveDue) saveState();
   }
 
   static SeqPattern sanitizePattern(SeqPattern p) {
@@ -240,39 +325,80 @@ struct Engine {
     return p;
   }
 
-  bool loadState() {
+  enum class Load { Missing, Loaded, Unreadable };
+
+  // Reads everything into temporaries and keeps it only if the whole file
+  // made sense.
+  Load loadState() {
+    if (stateDir.empty()) return Load::Missing;
     FILE* f = fopen(statePath().c_str(), "rb");
-    if (!f) return false;
-    uint32_t head[3];
-    bool ok = fread(head, sizeof(head), 1, f) == 1 && head[0] == kStateMagic && head[1] == kStateVersion;
-    for (int i = 0; ok && i < kNumPresets; i++) ok = readPreset(f, bank[i]);
-    for (int i = 0; ok && i < kNumPresets; i++) ok = readPreset(f, imported[i]);
-    int32_t g[16];
-    if (ok) ok = fread(g, sizeof(g), 1, f) == 1;
-    if (ok) {
-      auto clampi = [](int v, int lo, int hi) { return std::max(lo, std::min(hi, v)); };
-      globals.midiChannel = clampi(g[0], 0, 16);
-      globals.fxChannel = clampi(g[1], 1, 16);
-      globals.bendUp = clampi(g[2], 1, 24);
-      globals.bendDown = clampi(g[3], 1, 24);
-      globals.keyVelocity = clampi(g[4], 1, 127);
-      globals.glideMode = clampi(g[5], 0, 1);
-      globals.glideTime = clampi(g[6], 0, 100);
-      globals.masterVolume = clampi(g[7], 0, 100);
-      globals.tempo = clampi(g[8], 30, 300);
-      globals.fm1Quirks = g[9] != 0;
-      current = clampi(g[10], 0, kNumPresets - 1);
-      transpose = clampi(g[11], -12, 12);
-      haveFactory = g[12] != 0;
-    }
-    // Patterns are stored raw; skip them if the layout changed.
-    if (ok && head[2] == sizeof(SeqPattern)) {
-      SeqPattern tmp[kSeqPatterns];
-      if (fread(tmp, sizeof(tmp), 1, f) == 1)
-        for (int i = 0; i < kSeqPatterns; i++) patterns[i] = sanitizePattern(tmp[i]);
-    }
+    if (!f) return errno == ENOENT ? Load::Missing : Load::Unreadable;
+    std::vector<uint8_t> data;
+    uint8_t buf[65536];
+    size_t got;
+    while ((got = fread(buf, 1, sizeof(buf), f)) > 0) data.insert(data.end(), buf, buf + got);
+    bool ok = !ferror(f);
     fclose(f);
-    return ok;
+    Reader r{data.data(), data.size()};
+    uint32_t head[3];
+    ok = ok && r.take(head, sizeof(head)) && head[0] == kStateMagic && head[1] == kStateVersion;
+    std::vector<Preset> b(bank, bank + kNumPresets), imp(imported, imported + kNumPresets);
+    for (int i = 0; ok && i < kNumPresets; i++) ok = readPreset(r, b[i]);
+    for (int i = 0; ok && i < kNumPresets; i++) ok = readPreset(r, imp[i]);
+    int32_t g[16];
+    ok = ok && r.take(g, sizeof(g));
+    // Patterns are stored raw; skip them if the layout changed.
+    std::vector<SeqPattern> pats;
+    if (ok && head[2] == sizeof(SeqPattern)) {
+      pats.resize(kSeqPatterns);
+      ok = r.take(pats.data(), sizeof(SeqPattern) * kSeqPatterns);
+    }
+    if (!ok) return Load::Unreadable;
+    auto clampi = [](int v, int lo, int hi) { return std::max(lo, std::min(hi, v)); };
+    globals.midiChannel = clampi(g[0], 0, 16);
+    globals.fxChannel = clampi(g[1], 1, 16);
+    globals.bendUp = clampi(g[2], 1, 24);
+    globals.bendDown = clampi(g[3], 1, 24);
+    globals.keyVelocity = clampi(g[4], 1, 127);
+    globals.glideMode = clampi(g[5], 0, 1);
+    globals.glideTime = clampi(g[6], 0, 100);
+    globals.masterVolume = clampi(g[7], 0, 100);
+    globals.tempo = clampi(g[8], 30, 300);
+    globals.fm1Quirks = g[9] != 0;
+    current = clampi(g[10], 0, kNumPresets - 1);
+    transpose = clampi(g[11], -12, 12);
+    haveFactory = g[12] != 0;
+    std::copy(b.begin(), b.end(), bank);
+    std::copy(imp.begin(), imp.end(), imported);
+    for (size_t i = 0; i < pats.size(); i++) patterns[i] = sanitizePattern(pats[i]);
+    return Load::Loaded;
+  }
+
+  // Moves an unreadable state file aside so nothing overwrites it, and
+  // counts it as having had banks so factory banks are not imported.
+  void keepUnreadableState() {
+    char stamp[32];
+    time_t now = time(nullptr);
+    strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", localtime(&now));
+    std::string aside = statePath() + ".unreadable-" + stamp;
+    for (int i = 1; access(aside.c_str(), F_OK) == 0; i++)
+      aside = statePath() + ".unreadable-" + stamp + "-" + std::to_string(i);
+    saveBlocked = rename(statePath().c_str(), aside.c_str()) != 0;
+    haveFactory = true;
+    setMessage(saveBlocked ? "State unreadable: not saving" : "State unreadable: kept a copy");
+  }
+
+  bool openState() {
+    switch (loadState()) {
+      case Load::Loaded:
+        return true;
+      case Load::Unreadable:
+        keepUnreadableState();
+        return false;
+      case Load::Missing:
+        return false;
+    }
+    return false;
   }
 
   void pushAll() {
@@ -328,7 +454,7 @@ struct Engine {
     }
     recHeld++;
     pushPattern(selectedPattern);
-    saveState();
+    saveSoon();
     bump();
   }
 
@@ -423,7 +549,8 @@ struct Engine {
       // Parameter change: F0 43 10 gg pp vv F7, byte 2 exactly 0x10.
       if (len == 7 && d[2] == 0x10) {
         int addr = (d[3] << 7) + d[4];
-        if (addr < kVoiceSize) {
+        // The operator enable byte lies past the hardware's 155 byte buffer.
+        if (addr < kOpEnable) {
           edit.voice[addr] = (uint8_t)std::min<int>(d[5], vcedMax(addr));
           dirty = true;
           send(Command(Command::SetVoiceParam, addr, edit.voice[addr]));
@@ -526,6 +653,9 @@ struct Engine {
         uint32_t off = u32(1);
         uint32_t n = std::min<uint32_t>(u24(5), 16384);
         std::vector<uint8_t> out(p.payload.begin(), p.payload.begin() + 8);
+        out[5] = n & 0xff;
+        out[6] = (n >> 8) & 0xff;
+        out[7] = (n >> 16) & 0xff;
         if (off == 0 && n == 155) {
           // Reading 155 bytes at 0 returns the edit buffer as VCED.
           out.insert(out.end(), edit.voice, edit.voice + 155);
@@ -573,17 +703,36 @@ bool mf1_start(const char* stateDir, const char* portName, const char* outputUID
   if (e->started) return true;
   e->stateDir = stateDir ? stateDir : "";
   e->portName = portName ? portName : "MF-1";
-  e->loadState();
+  e->openState();
   e->audio.onPrepare([e](double sr) { e->synth.prepare(sr); });
+  e->audio.onDeviceLost([e] {
+    LOCK;
+    e->restartAudio("");
+  });
   e->started = true;
   e->pushAll();
   e->outputUID = outputUID ? outputUID : "";
-  bool ok = e->startAudio();
+  bool ok = e->startAudio(e->outputUID);
   e->midi.start(e->portName, [e](const uint8_t* d, size_t len) { e->handleMidi(d, len); });
   e->running = true;
   e->noteThread = std::thread([e] {
+    auto lastSave = std::chrono::steady_clock::now();
     while (e->running.load()) {
       e->drainNotes();
+      auto now = std::chrono::steady_clock::now();
+      if (e->saveDue.load() && now - lastSave >= std::chrono::milliseconds(500)) {
+        lastSave = now;
+        std::vector<uint8_t> data;
+        uint64_t seq = 0;
+        {
+          LOCK;
+          if (e->saveDue.exchange(false) && !e->saveBlocked) {
+            data = e->serializeState();
+            seq = ++e->saveSeq;
+          }
+        }
+        if (seq) e->writeState(data, seq);
+      }
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
   });
@@ -594,8 +743,11 @@ void mf1_stop(void) {
   Engine* e = E();
   e->running = false;
   if (e->noteThread.joinable()) e->noteThread.join();
+  {
+    LOCK;
+    e->flushSave();
+  }
   e->audio.stop();
-  e->audioRunning = false;
 }
 
 bool mf1_needs_factory(void) {
@@ -763,6 +915,7 @@ void mf1_save(void) {
   e->pushBankPreset(e->current);
   e->dirty = false;
   e->saveState();
+  e->bump();
 }
 
 void mf1_init_voice(void) {
@@ -783,6 +936,7 @@ void mf1_rename(const char* name) {
   }
   e->dirty = true;
   e->pushEdit();
+  e->bump();
 }
 
 void mf1_copy_voice(int from) {
@@ -792,6 +946,7 @@ void mf1_copy_voice(int from) {
   e->edit = e->bank[from];
   e->dirty = true;
   e->pushEdit();
+  e->bump();
 }
 
 void mf1_reset_bank(int bank) {
@@ -805,6 +960,7 @@ void mf1_reset_bank(int bank) {
   }
   if (e->current / 32 == bank) e->loadPreset(e->current);
   e->saveState();
+  e->bump();
 }
 
 void mf1_set_op_mutes(int mask) {
@@ -1013,6 +1169,7 @@ void mf1_seq_stop(void) {
   LOCK;
   e->recording = false;
   e->send(Command(Command::Stop));
+  e->flushSave();
 }
 
 bool mf1_seq_playing(void) { return E()->synth.playing.load(); }
@@ -1023,6 +1180,7 @@ void mf1_seq_record(bool on) {
   e->recording = on;
   e->recHeld = 0;
   e->recLongFrom = -1;
+  if (!on) e->flushSave();
 }
 
 bool mf1_seq_recording(void) {
@@ -1095,6 +1253,7 @@ int mf1_import_syx(const uint8_t* data, size_t len) {
     LOCK;
     memcpy(e->pendingVmem, data, 4096);
     e->bankPending = true;
+    e->bump();
     return 1;
   }
   return 0;
@@ -1214,6 +1373,27 @@ size_t mf1_take_midi_out(uint8_t* out, size_t max) {
   return n;
 }
 
+bool mf1_offline_open_state(const char* stateDir) {
+  Engine* e = E();
+  LOCK;
+  e->stateDir = stateDir ? stateDir : "";
+  e->saveBlocked = false;
+  bool ok = e->openState();
+  if (ok) e->pushAll();
+  return ok;
+}
+
+size_t mf1_midi_loopback(const uint8_t* data, size_t len, size_t listBytes, uint8_t* out, size_t max,
+                         int* lists) {
+  size_t n = 0;
+  for (auto& m : midiLoopback(data, len, listBytes, lists)) {
+    size_t k = std::min(max - n, m.size());
+    memcpy(out + n, m.data(), k);
+    n += k;
+  }
+  return n;
+}
+
 void mf1_latency(double out[6]) {
   Engine* e = E();
   auto l = e->audio.latency();
@@ -1244,7 +1424,5 @@ void mf1_set_output(const char* uid) {
   Engine* e = E();
   LOCK;
   e->outputUID = uid ? uid : "";
-  e->audioRunning = false;
-  e->audio.stop();
-  e->startAudio();
+  e->restartAudio(e->outputUID);
 }

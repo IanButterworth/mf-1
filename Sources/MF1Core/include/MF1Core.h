@@ -18,7 +18,10 @@ void mf1_output_info(int index, char name[256], char uid[256]);
 // Moves audio to another device; an empty UID follows the system default.
 void mf1_set_output(const char* uid);
 void mf1_stop(void);
-// True on a fresh state, before any factory banks were imported.
+// True on a fresh state, before any factory banks were imported. False
+// when a saved state existed but could not be read: that file is renamed
+// to state.bin.unreadable-<time> and kept, the banks start empty, and a
+// message says so. Saving is then disabled if the file could not be moved.
 bool mf1_needs_factory(void);
 // Loads a 4104 byte DX7 bank into bank 0..3 and records it as the
 // "last imported" bank used by Reset Patches.
@@ -145,6 +148,15 @@ void mf1_inject_midi(const uint8_t* data, size_t len);
 // In offline mode, MIDI the engine would send is kept; this takes the
 // oldest message, returning its length (0 when none).
 size_t mf1_take_midi_out(uint8_t* out, size_t max);
+// Offline: loads stateDir as mf1_start does, and saves there from now on;
+// an empty path stops saving. True when a saved state was loaded.
+bool mf1_offline_open_state(const char* stateDir);
+// Encodes a message as the virtual MIDI source sends it, in event lists
+// of at most listBytes (0 for the size used when sending), and decodes it
+// again as the input ports do. Writes the decoded messages back to back,
+// returns their total length and stores the number of event lists.
+size_t mf1_midi_loopback(const uint8_t* data, size_t len, size_t listBytes, uint8_t* out, size_t max,
+                         int* lists);
 
 #ifdef __cplusplus
 }

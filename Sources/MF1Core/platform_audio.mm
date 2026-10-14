@@ -3,7 +3,11 @@
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreAudio/CoreAudio.h>
 
+#include <mach/mach_time.h>
+
 #include <algorithm>
+#include <chrono>
+#include <thread>
 
 namespace mf1 {
 
@@ -88,25 +92,91 @@ std::vector<AudioOutput::Device> AudioOutput::outputDevices() {
   return out;
 }
 
-bool AudioOutput::start(RenderFn fn, const std::string& deviceUID) {
-  fn_ = std::move(fn);
-  // A chosen device needs the plain HAL unit; if it has gone, fall back
-  // to the system default.
-  AudioDeviceID chosen = deviceUID.empty() ? 0 : deviceForUID(deviceUID);
+namespace {
+
+// Asks for one 64 frame engine block per IO cycle. Notes start on block
+// boundaries, so a smaller buffer would not make them start sooner.
+void requestSmallBuffer(AudioUnit unit) {
+  AudioDeviceID device = 0;
+  UInt32 size = sizeof(device);
+  AudioUnitGetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &device, &size);
+  UInt32 frames = 64;
+  AudioValueRange range{};
+  AudioObjectPropertyAddress ra{kAudioDevicePropertyBufferFrameSizeRange, kAudioObjectPropertyScopeGlobal,
+                                kAudioObjectPropertyElementMain};
+  size = sizeof(range);
+  if (device && AudioObjectGetPropertyData(device, &ra, 0, nullptr, &size, &range) == noErr)
+    frames = (UInt32)std::max<Float64>(range.mMinimum, std::min<Float64>(range.mMaximum, frames));
+  AudioUnitSetProperty(unit, kAudioDevicePropertyBufferFrameSize, kAudioUnitScope_Global, 0, &frames, sizeof(frames));
+}
+
+AudioUnit newOutputUnit(AudioDeviceID chosen) {
   AudioComponentDescription desc{};
   desc.componentType = kAudioUnitType_Output;
   desc.componentSubType = chosen ? kAudioUnitSubType_HALOutput : kAudioUnitSubType_DefaultOutput;
   desc.componentManufacturer = kAudioUnitManufacturer_Apple;
   AudioComponent comp = AudioComponentFindNext(nullptr, &desc);
-  if (!comp) return false;
   AudioUnit unit = nullptr;
-  if (AudioComponentInstanceNew(comp, &unit) != noErr) return false;
+  if (!comp || AudioComponentInstanceNew(comp, &unit) != noErr) return nullptr;
   if (chosen &&
       AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &chosen,
                            sizeof(chosen)) != noErr) {
     AudioComponentInstanceDispose(unit);
-    return false;
+    return nullptr;
   }
+  return unit;
+}
+
+const AudioObjectPropertyAddress kAliveAddress{kAudioDevicePropertyDeviceIsAlive, kAudioObjectPropertyScopeGlobal,
+                                               kAudioObjectPropertyElementMain};
+const AudioObjectPropertyAddress kDefaultAddress{kAudioHardwarePropertyDefaultOutputDevice,
+                                                 kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain};
+
+uint64_t nanosToTicks(uint64_t ns) {
+  static mach_timebase_info_data_t tb = [] {
+    mach_timebase_info_data_t t;
+    mach_timebase_info(&t);
+    return t;
+  }();
+  return ns * tb.denom / tb.numer;
+}
+
+}  // namespace
+
+// The listeners hand their work to a short-lived thread: Core Audio may
+// wait for a running listener while removing it, so they must not lock.
+struct AudioListeners {
+  static OSStatus alive(AudioObjectID, UInt32, const AudioObjectPropertyAddress*, void* refCon) {
+    auto* self = static_cast<AudioOutput*>(refCon);
+    std::thread([self] { self->checkAlive(); }).detach();
+    return noErr;
+  }
+  static OSStatus defaultChanged(AudioObjectID, UInt32, const AudioObjectPropertyAddress*, void* refCon) {
+    auto* self = static_cast<AudioOutput*>(refCon);
+    std::thread([self] {
+      // Give the unit time to follow the new default device first.
+      std::this_thread::sleep_for(std::chrono::milliseconds(300));
+      self->deviceChanged();
+    }).detach();
+    return noErr;
+  }
+  static void unitDevice(void* refCon, AudioUnit, AudioUnitPropertyID, AudioUnitScope, AudioUnitElement) {
+    auto* self = static_cast<AudioOutput*>(refCon);
+    std::thread([self] { self->deviceChanged(); }).detach();
+  }
+};
+
+bool AudioOutput::start(RenderFn fn, const std::string& deviceUID) {
+  fn_ = std::move(fn);
+  // A chosen device needs the plain HAL unit. If it has gone or cannot be
+  // selected, fall back to the system default.
+  AudioDeviceID chosen = deviceUID.empty() ? 0 : deviceForUID(deviceUID);
+  AudioUnit unit = chosen ? newOutputUnit(chosen) : nullptr;
+  if (!unit) {
+    chosen = 0;
+    unit = newOutputUnit(0);
+  }
+  if (!unit) return false;
 
   // Ask for the device's own rate so Core Audio does not resample.
   AudioStreamBasicDescription deviceFormat{};
@@ -139,27 +209,49 @@ bool AudioOutput::start(RenderFn fn, const std::string& deviceUID) {
     AudioComponentInstanceDispose(unit);
     return false;
   }
-  // One 64 frame engine block per IO cycle. Notes start on block
-  // boundaries, so a smaller buffer would not make them start sooner. The
-  // size is set after initialising, or the unit resets it.
-  AudioDeviceID device = 0;
-  size = sizeof(device);
-  AudioUnitGetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &device, &size);
-  UInt32 frames = 64;
-  AudioValueRange range{};
-  AudioObjectPropertyAddress ra{kAudioDevicePropertyBufferFrameSizeRange, kAudioObjectPropertyScopeGlobal,
-                                kAudioObjectPropertyElementMain};
-  size = sizeof(range);
-  if (device && AudioObjectGetPropertyData(device, &ra, 0, nullptr, &size, &range) == noErr)
-    frames = (UInt32)std::max<Float64>(range.mMinimum, std::min<Float64>(range.mMaximum, frames));
-  AudioUnitSetProperty(unit, kAudioDevicePropertyBufferFrameSize, kAudioUnitScope_Global, 0, &frames, sizeof(frames));
+  // The size is set after initialising, or the unit resets it.
+  requestSmallBuffer(unit);
+  startedAt_ = mach_absolute_time();
+  started_ = true;
   if (AudioOutputUnitStart(unit) != noErr) {
+    started_ = false;
     AudioUnitUninitialize(unit);
     AudioComponentInstanceDispose(unit);
     return false;
   }
-  unit_ = unit;
+  {
+    std::lock_guard<std::mutex> g(mu_);
+    unit_ = unit;
+    watched_ = chosen;
+  }
+  AudioUnitAddPropertyListener(unit, kAudioOutputUnitProperty_CurrentDevice, AudioListeners::unitDevice, this);
+  if (chosen)
+    AudioObjectAddPropertyListener(chosen, &kAliveAddress, AudioListeners::alive, this);
+  else
+    AudioObjectAddPropertyListener(kAudioObjectSystemObject, &kDefaultAddress, AudioListeners::defaultChanged,
+                                   this);
   return true;
+}
+
+void AudioOutput::deviceChanged() {
+  std::lock_guard<std::mutex> g(mu_);
+  if (unit_) requestSmallBuffer(static_cast<AudioUnit>(unit_));
+}
+
+void AudioOutput::checkAlive() {
+  {
+    std::lock_guard<std::mutex> g(mu_);
+    if (!unit_ || !watched_) return;
+    UInt32 alive = 0, size = sizeof(alive);
+    if (AudioObjectGetPropertyData(watched_, &kAliveAddress, 0, nullptr, &size, &alive) == noErr && alive) return;
+  }
+  if (lost_) lost_();
+}
+
+bool AudioOutput::running() const {
+  if (!started_.load()) return false;
+  uint64_t last = std::max(startedAt_.load(), lastRender_.load(std::memory_order_relaxed));
+  return mach_absolute_time() - last < nanosToTicks(250000000ull);
 }
 
 AudioOutput::Latency AudioOutput::latency() const {
@@ -197,15 +289,29 @@ AudioOutput::Latency AudioOutput::latency() const {
 }
 
 void AudioOutput::stop() {
-  if (!unit_) return;
+  started_ = false;
+  AudioDeviceID watched;
+  {
+    std::lock_guard<std::mutex> g(mu_);
+    if (!unit_) return;
+    watched = watched_;
+  }
+  if (watched)
+    AudioObjectRemovePropertyListener(watched, &kAliveAddress, AudioListeners::alive, this);
+  else
+    AudioObjectRemovePropertyListener(kAudioObjectSystemObject, &kDefaultAddress, AudioListeners::defaultChanged,
+                                      this);
+  std::lock_guard<std::mutex> g(mu_);
   auto unit = static_cast<AudioUnit>(unit_);
   AudioOutputUnitStop(unit);
   AudioUnitUninitialize(unit);
   AudioComponentInstanceDispose(unit);
   unit_ = nullptr;
+  watched_ = 0;
 }
 
 void AudioOutput::render(float* left, float* right, uint32_t frames) {
+  lastRender_.store(mach_absolute_time(), std::memory_order_relaxed);
   fn_(left, right, frames);
 }
 
