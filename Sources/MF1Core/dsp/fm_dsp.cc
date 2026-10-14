@@ -237,8 +237,7 @@ static const int8_t pitchtab[] = {
     18,   19,   20,   21,  22,  23,  24,  25,  26,  27,  28,  29,  30,  31,  32,  33,  34,
     35,   38,   40,   43,  46,  49,  53,  58,  65,  73,  82,  92,  103, 115, 127};
 
-void PitchEnv::set(const int r[4], const int l[4], bool slow) {
-  slow_ = slow;
+void PitchEnv::set(const int r[4], const int l[4]) {
   for (int i = 0; i < 4; i++) {
     rates_[i] = r[i];
     levels_[i] = l[i];
@@ -288,7 +287,6 @@ void PitchEnv::advance(int newix) {
     targetlevel_ = pitchtab[levels_[ix_]] << 19;
     rising_ = targetlevel_ > level_;
     inc_ = pitchratetab[rates_[ix_]] * unit_;
-    if (slow_) inc_ = (int32_t)(inc_ * (1.0 / 1.37));
   }
 }
 
@@ -393,33 +391,33 @@ const int algorithms[32][6] = {
     {0xc1, 0x14, 0x04, 0x04, 0x04, 0x04}, {0xc4, 0x04, 0x04, 0x04, 0x04, 0x04},
 };
 
-inline void opCompute(int32_t* out, const int32_t* in, int32_t phase, int32_t freq,
+inline void opCompute(int32_t* out, const int32_t* in, uint32_t phase, uint32_t freq,
                       int32_t gain1, int32_t gain2, bool add) {
   int32_t dgain = (gain2 - gain1 + (N >> 1)) >> LG_N;
   int32_t gain = gain1;
   for (int i = 0; i < N; i++) {
     gain += dgain;
-    int32_t y = Sin::lookup(phase + in[i]);
+    int32_t y = Sin::lookup((int32_t)(phase + (uint32_t)in[i]));
     int32_t v = (int32_t)(((int64_t)y * gain) >> 24);
     out[i] = add ? out[i] + v : v;
     phase += freq;
   }
 }
 
-inline void opComputePure(int32_t* out, int32_t phase, int32_t freq, int32_t gain1,
+inline void opComputePure(int32_t* out, uint32_t phase, uint32_t freq, int32_t gain1,
                           int32_t gain2, bool add) {
   int32_t dgain = (gain2 - gain1 + (N >> 1)) >> LG_N;
   int32_t gain = gain1;
   for (int i = 0; i < N; i++) {
     gain += dgain;
-    int32_t y = Sin::lookup(phase);
+    int32_t y = Sin::lookup((int32_t)phase);
     int32_t v = (int32_t)(((int64_t)y * gain) >> 24);
     out[i] = add ? out[i] + v : v;
     phase += freq;
   }
 }
 
-inline void opComputeFb(int32_t* out, int32_t phase, int32_t freq, int32_t gain1,
+inline void opComputeFb(int32_t* out, uint32_t phase, uint32_t freq, int32_t gain1,
                         int32_t gain2, int32_t* fb_buf, int fb_shift, bool add) {
   int32_t dgain = (gain2 - gain1 + (N >> 1)) >> LG_N;
   int32_t gain = gain1;
@@ -429,7 +427,7 @@ inline void opComputeFb(int32_t* out, int32_t phase, int32_t freq, int32_t gain1
     gain += dgain;
     int32_t scaled_fb = (y0 + y) >> (fb_shift + 1);
     y0 = y;
-    y = Sin::lookup(phase + scaled_fb);
+    y = Sin::lookup((int32_t)(phase + (uint32_t)scaled_fb));
     y = (int32_t)(((int64_t)y * gain) >> 24);
     out[i] = add ? out[i] + y : y;
     phase += freq;
@@ -480,7 +478,7 @@ void FmCore::compute(int32_t* output, FmOpParams* params, int algorithm, int32_t
     } else if (!add) {
       has_contents[outbus] = false;
     }
-    param.phase += param.freq << LG_N;
+    param.phase += (uint32_t)param.freq << LG_N;
   }
 }
 

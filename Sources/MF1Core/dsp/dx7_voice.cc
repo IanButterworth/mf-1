@@ -161,7 +161,7 @@ void Dx7Voice::init(const uint8_t patch[kVoiceSize], int midinote, int velocity,
     rates[i] = patch[126 + i];
     levels[i] = patch[130 + i];
   }
-  pitchenv_.set(rates, levels, quirks_);
+  pitchenv_.set(rates, levels);
   algorithm_ = patch[134];
   int feedback = patch[135];
   fb_shift_ = feedback != 0 ? 8 - feedback : 16;
@@ -170,9 +170,8 @@ void Dx7Voice::init(const uint8_t patch[kVoiceSize], int midinote, int velocity,
   fb_buf_[0] = fb_buf_[1] = 0;
   pitchmoddepth_ = (patch[139] * 165) >> 6;
   ampmoddepth_ = (patch[140] * 165) >> 6;
-  pitchmodsens_ = pitchmodsenstab[patch[143] & 7];
-  // FM-1 vibrato depth is the DX7 table times 0.88.
-  if (quirks_) pitchmodsens_ = pitchmodsens_ * 225 >> 8;
+  // Q8. FM-1 vibrato is about 0.895 of the DX7 depth, so keep the fraction.
+  pitchmodsens_ = pitchmodsenstab[patch[143] & 7] * (quirks_ ? 229 : 256);
   opEnable_ = patch[kOpEnable] & 0x3f;
   carriers_ = std::max(1, FmCore::carrierCount(algorithm_));
   glideOffset_ = 0;
@@ -194,8 +193,7 @@ void Dx7Voice::update(const uint8_t patch[kVoiceSize]) {
   if (quirks_ && feedback != 0) fb_shift_ += 2;
   pitchmoddepth_ = (patch[139] * 165) >> 6;
   ampmoddepth_ = (patch[140] * 165) >> 6;
-  pitchmodsens_ = pitchmodsenstab[patch[143] & 7];
-  if (quirks_) pitchmodsens_ = pitchmodsens_ * 225 >> 8;
+  pitchmodsens_ = pitchmodsenstab[patch[143] & 7] * (quirks_ ? 229 : 256);
   opEnable_ = patch[kOpEnable] & 0x3f;
   carriers_ = std::max(1, FmCore::carrierCount(algorithm_));
 }
@@ -229,9 +227,9 @@ void Dx7Voice::compute(int32_t* buf, int32_t lfo_val, int32_t lfo_delay, const C
   if (ctrls.modWheelAmp) amd = std::min(255, amd + wheel);
   if (ctrls.aftertouchAmp) amd = std::min(255, amd + at);
 
-  uint32_t pmdq = (uint32_t)pmd * (uint32_t)lfo_delay;  // Q32
-  int32_t senslfo = pitchmodsens_ * (lfo_val - (1 << 23));
-  pitchmod += (int32_t)((((int64_t)pmdq) * (int64_t)senslfo) >> 39);
+  int64_t pmdq = ((int64_t)pmd * lfo_delay) >> 8;  // Q24
+  int64_t senslfo = (int64_t)pitchmodsens_ * (lfo_val - (1 << 23));
+  pitchmod += (int32_t)((pmdq * senslfo) >> 39);
 
   int bendRange = ctrls.pitchBend >= 0x2000 ? ctrls.pitchBendUp : ctrls.pitchBendDown;
   int32_t pb = (int32_t)(((int64_t)(ctrls.pitchBend - 0x2000) * bendRange * ((1 << 24) / 12)) >> 13);

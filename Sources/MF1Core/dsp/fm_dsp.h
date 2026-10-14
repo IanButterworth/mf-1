@@ -105,8 +105,7 @@ class Env {
 class PitchEnv {
  public:
   static void init(double sample_rate);
-  // slow stretches every rate, as measured on FM-1 V15 (1.37x).
-  void set(const int rates[4], const int levels[4], bool slow = false);
+  void set(const int rates[4], const int levels[4]);
   void update(const int rates[4], const int levels[4]);
   // Q24 per octave.
   int32_t getsample();
@@ -122,7 +121,6 @@ class PitchEnv {
   int ix_ = 4;
   int32_t inc_ = 0;
   bool down_ = false;
-  bool slow_ = false;
   void advance(int newix);
 };
 
@@ -152,7 +150,8 @@ class Lfo {
 struct FmOpParams {
   int32_t gain[2];
   int32_t freq;
-  int32_t phase;
+  // Unsigned so the wrap at the end of each cycle is defined.
+  uint32_t phase;
 };
 
 class FmCore {
