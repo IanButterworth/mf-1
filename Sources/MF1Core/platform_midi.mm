@@ -3,6 +3,8 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreMIDI/CoreMIDI.h>
 
+#include <algorithm>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -13,7 +15,10 @@ namespace {
 
 // Reassembles MIDI 1.0 byte messages from Universal MIDI Packets.
 struct UmpParser {
+  // Longer SysEx messages are dropped; the largest real one is under 20 KB.
+  static constexpr size_t kMaxSysex = 64 * 1024;
   std::vector<uint8_t> sysex;
+  bool inSysex = false;
 
   template <typename Emit>
   void parse(const MIDIEventList* list, Emit&& emit) {
@@ -44,12 +49,20 @@ struct UmpParser {
           if (st == 0 || st == 1) {
             sysex.clear();
             sysex.push_back(0xf0);
+            inSysex = true;
           }
-          for (int b = 0; b < count && b < 6; b++) sysex.push_back(bytes[b]);
-          if (st == 0 || st == 3) {
-            sysex.push_back(0xf7);
-            emit(sysex.data(), sysex.size());
-            sysex.clear();
+          if (inSysex) {
+            for (int b = 0; b < count && b < 6; b++) sysex.push_back(bytes[b]);
+            if (sysex.size() > kMaxSysex) {
+              inSysex = false;
+              sysex.clear();
+              sysex.shrink_to_fit();
+            } else if (st == 0 || st == 3) {
+              sysex.push_back(0xf7);
+              emit(sysex.data(), sysex.size());
+              sysex.clear();
+              inSysex = false;
+            }
           }
         }
         i += words;
@@ -58,6 +71,58 @@ struct UmpParser {
     }
   }
 };
+
+// Encodes one message as MIDI 1.0 UMP event lists of at most maxBytes
+// each, handing every full list to send. A long SysEx spans several lists.
+template <typename Send>
+void encodeEventLists(const uint8_t* data, size_t len, size_t maxBytes, Send&& send) {
+  if (len == 0) return;
+  size_t packets = data[0] == 0xf0 ? len / 6 + 2 : 1;
+  // Each SysEx7 event may take a packet of its own.
+  size_t bytes = std::min(maxBytes, sizeof(MIDIEventList) + packets * sizeof(MIDIEventPacket));
+  std::vector<uint8_t> storage(bytes);
+  auto* list = reinterpret_cast<MIDIEventList*>(storage.data());
+  MIDIEventPacket* pkt = MIDIEventListInit(list, kMIDIProtocol_1_0);
+  auto add = [&](UInt32 count, const UInt32* words) {
+    MIDIEventPacket* next = MIDIEventListAdd(list, storage.size(), pkt, 0, count, words);
+    if (!next && list->numPackets) {
+      send(list);
+      pkt = MIDIEventListInit(list, kMIDIProtocol_1_0);
+      next = MIDIEventListAdd(list, storage.size(), pkt, 0, count, words);
+    }
+    if (next) pkt = next;
+    return next != nullptr;
+  };
+  if (data[0] == 0xf0) {
+    const uint8_t* body = data + 1;
+    size_t n = len - 1;
+    if (n && body[n - 1] == 0xf7) n--;
+    size_t off = 0;
+    bool first = true;
+    do {
+      size_t chunk = std::min<size_t>(6, n - off);
+      bool last = off + chunk >= n;
+      uint32_t st = first && last ? 0 : first ? 1 : last ? 3 : 2;
+      uint8_t b[6] = {};
+      for (size_t i = 0; i < chunk; i++) b[i] = body[off + i];
+      UInt32 words[2] = {(3u << 28) | (st << 20) | ((uint32_t)chunk << 16) | ((uint32_t)b[0] << 8) | b[1],
+                         ((uint32_t)b[2] << 24) | ((uint32_t)b[3] << 16) | ((uint32_t)b[4] << 8) | b[5]};
+      if (!add(2, words)) return;
+      off += chunk;
+      first = false;
+    } while (off < n);
+  } else {
+    uint8_t status = data[0];
+    uint32_t mt = status >= 0xf0 ? 1 : 2;
+    UInt32 word = (mt << 28) | ((uint32_t)status << 16) | ((len > 1 ? (uint32_t)data[1] : 0) << 8) |
+                  (len > 2 ? data[2] : 0);
+    if (!add(1, &word)) return;
+  }
+  if (list->numPackets) send(list);
+}
+
+// The most CoreMIDI is handed in one call.
+constexpr size_t kMaxListBytes = 64 * 1024;
 
 CFStringRef cfstr(const std::string& s) {
   return CFStringCreateWithCString(nullptr, s.c_str(), kCFStringEncodingUTF8);
@@ -72,19 +137,33 @@ struct MidiIO::Impl {
   MIDIEndpointRef virtualSource = 0;
   Handler handler;
   std::mutex lock;
-  std::set<MIDIEndpointRef> connected;
   // One parser per input, so interleaved SysEx streams do not mix.
-  std::vector<std::unique_ptr<UmpParser>> parsers;
+  std::map<MIDIEndpointRef, std::unique_ptr<UmpParser>> parsers;
+  // Parsers of removed sources live until the next setup change, in case
+  // a callback for that source is still running.
+  std::vector<std::unique_ptr<UmpParser>> retired;
   UmpParser virtualParser;
 
   void connectAll() {
     std::lock_guard<std::mutex> g(lock);
+    retired.clear();
+    std::set<MIDIEndpointRef> present;
     ItemCount n = MIDIGetNumberOfSources();
     for (ItemCount i = 0; i < n; i++) {
       MIDIEndpointRef src = MIDIGetSource(i);
-      if (src == virtualSource || connected.count(src)) continue;
-      parsers.push_back(std::make_unique<UmpParser>());
-      if (MIDIPortConnectSource(inPort, src, parsers.back().get()) == noErr) connected.insert(src);
+      present.insert(src);
+      if (src == virtualSource || parsers.count(src)) continue;
+      auto parser = std::make_unique<UmpParser>();
+      if (MIDIPortConnectSource(inPort, src, parser.get()) == noErr) parsers[src] = std::move(parser);
+    }
+    for (auto it = parsers.begin(); it != parsers.end();) {
+      if (present.count(it->first)) {
+        ++it;
+        continue;
+      }
+      MIDIPortDisconnectSource(inPort, it->first);
+      retired.push_back(std::move(it->second));
+      it = parsers.erase(it);
     }
   }
 };
@@ -137,37 +216,21 @@ void MidiIO::rescanSources() {
 
 void MidiIO::send(const uint8_t* data, size_t len) {
   if (!impl_ || len == 0) return;
-  // Room for a full 32 voice bulk dump as UMP SysEx7 packets.
-  std::vector<uint8_t> storage(sizeof(MIDIEventList) + (len / 6 + 4) * 16 + 1024);
-  auto* list = reinterpret_cast<MIDIEventList*>(storage.data());
-  MIDIEventPacket* pkt = MIDIEventListInit(list, kMIDIProtocol_1_0);
-  if (data[0] == 0xf0) {
-    const uint8_t* body = data + 1;
-    size_t n = len - 1;
-    if (n && body[n - 1] == 0xf7) n--;
-    size_t off = 0;
-    bool first = true;
-    do {
-      size_t chunk = std::min<size_t>(6, n - off);
-      bool last = off + chunk >= n;
-      uint32_t st = first && last ? 0 : first ? 1 : last ? 3 : 2;
-      uint8_t b[6] = {};
-      for (size_t i = 0; i < chunk; i++) b[i] = body[off + i];
-      UInt32 words[2] = {(3u << 28) | (st << 20) | ((uint32_t)chunk << 16) | ((uint32_t)b[0] << 8) | b[1],
-                         ((uint32_t)b[2] << 24) | ((uint32_t)b[3] << 16) | ((uint32_t)b[4] << 8) | b[5]};
-      pkt = MIDIEventListAdd(list, storage.size(), pkt, 0, 2, words);
-      if (!pkt) break;
-      off += chunk;
-      first = false;
-    } while (off < n);
-  } else {
-    uint8_t status = data[0];
-    uint32_t mt = status >= 0xf0 ? 1 : 2;
-    UInt32 word = (mt << 28) | ((uint32_t)status << 16) | ((len > 1 ? (uint32_t)data[1] : 0) << 8) |
-                  (len > 2 ? data[2] : 0);
-    MIDIEventListAdd(list, storage.size(), pkt, 0, 1, &word);
-  }
-  MIDIReceivedEventList(impl_->virtualSource, list);
+  encodeEventLists(data, len, kMaxListBytes,
+                   [&](const MIDIEventList* list) { MIDIReceivedEventList(impl_->virtualSource, list); });
+}
+
+std::vector<std::vector<uint8_t>> midiLoopback(const uint8_t* data, size_t len, size_t maxListBytes,
+                                               int* lists) {
+  std::vector<std::vector<uint8_t>> out;
+  UmpParser parser;
+  int count = 0;
+  encodeEventLists(data, len, maxListBytes ? maxListBytes : kMaxListBytes, [&](const MIDIEventList* list) {
+    count++;
+    parser.parse(list, [&](const uint8_t* d, size_t l) { out.emplace_back(d, d + l); });
+  });
+  if (lists) *lists = count;
+  return out;
 }
 
 }  // namespace mf1
