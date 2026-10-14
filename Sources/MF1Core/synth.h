@@ -1,6 +1,7 @@
 #pragma once
 #include <atomic>
 #include <cstdint>
+#include <vector>
 
 #include "dsp/dx7_voice.h"
 #include "fx.h"
@@ -8,7 +9,11 @@
 
 namespace mf1 {
 
-constexpr int kNumPresets = 128;
+// Banks A-D are the FM-1's 128 presets. Bank E (129-160) is an MF-1 extra,
+// reachable only in extended mode.
+constexpr int kNumPresets = 160;
+constexpr int kFaithfulPresets = 128;
+constexpr int kExtendedBank = 4;
 constexpr int kMaxPolyphony = 12;
 constexpr int kSeqPatterns = 16;
 constexpr int kSeqSteps = 16;
@@ -64,6 +69,20 @@ struct SeqPattern {
   bool isEmpty() const;
 };
 
+// A note in a pre-programmed song, timed in ticks of 96 per quarter note.
+struct SongEvent {
+  uint32_t start;
+  uint16_t length;
+  uint8_t note, velocity;
+};
+constexpr int kMaxSongEvents = 2048;
+constexpr int kSongTicksPerBeat = 96;
+
+struct SongChunk {
+  int count = 0;
+  SongEvent events[24];
+};
+
 enum GlideMode { kGlideFullTime, kGlideFingered };
 
 struct GlobalSettings {
@@ -79,6 +98,10 @@ struct GlobalSettings {
   // Not a hardware setting: reproduce the measured V15 deviations, the
   // output filters and 16 bit output. Off gives a clean msfa engine.
   bool fm1Quirks = true;
+  // Extended mode: MF-1 additions after the FM-1's signal path. Off is
+  // faithful to the hardware, and every extended setting is then ignored.
+  bool extended = false;
+  int stereoWidth = 0;  // 0..100, extended only
 };
 
 struct Command {
@@ -86,6 +109,7 @@ struct Command {
     NoteOn, NoteOff, LoadPreset, SetEdit, SetBankPreset, SetVoiceParam, SetGlobals, MuteOps,
     PitchBend, ModWheel, Breath, Foot, Aftertouch, Sustain, AllNotesOff, ArpEnable, SetArp,
     SeqEnable, SetPattern, SelectPattern, Play, Stop, ClockTick, ClockStart, ClockStop,
+    SongClear, SongAdd, SongPlay, SongStop,
   } type;
   int a = 0, b = 0, c = 0;
   uint64_t stamp = 0;  // mach_absolute_time when queued
@@ -94,6 +118,7 @@ struct Command {
     GlobalSettings globals;
     ArpSettings arp;
     SeqPattern pattern;
+    SongChunk song;
   };
   Command() : preset() {}
   explicit Command(Type t, int a_ = 0, int b_ = 0) : type(t), a(a_), b(b_), preset() {}
@@ -109,7 +134,9 @@ class Synth {
   Synth();
   void prepare(double sampleRate);
   // Audio thread. Fills mono out.
-  void render(float* out, int frames);
+  void render(float* out, int frames) { render(out, nullptr, frames); }
+  // Stereo when right is given, else mono into left.
+  void render(float* left, float* right, int frames);
 
   // One queue per producer thread so each stays single producer.
   SpscQueue<Command, 512> uiQueue;
@@ -121,6 +148,7 @@ class Synth {
   std::atomic<int> seqStep{-1};
   std::atomic<int> seqPatternPlaying{-1};
   std::atomic<bool> playing{false};
+  std::atomic<bool> songPlaying{false};
   // Changes when the synth itself switches preset (sequencer voice binding).
   std::atomic<int> currentPreset{0};
   std::atomic<uint32_t> presetSwitches{0};
@@ -216,6 +244,27 @@ class Synth {
   bool chainDue_ = false;
 
   bool running_ = false;
+
+  // Song player: a list of timed notes played against its own tempo.
+  SongEvent songEvents_[kMaxSongEvents];
+  int songCount_ = 0;
+  int songNext_ = 0;
+  bool songOn_ = false;
+  double songPos_ = 0;  // ticks
+  double songLength_ = 0;
+  double songTempo_ = 120;
+  int songWidth_ = -1;  // the song's stereo width while it plays, -1 for the global one
+
+  // Extended mode stereo widener, after the mono FM-1 path.
+  std::vector<float> wideBuf_;
+  int widePos_ = 0;
+  double widePhase_ = 0;
+  float wideAmount_ = 0;  // smoothed width, 0..1
+  float blockR_[N];
+
+  void advanceSong(int frames);
+  void widen();
+  void stopSong();
   double phase_ = 0;
   int stepCount_ = 0;
   int ticksLeft_ = 0;  // MIDI clock ticks until the next step

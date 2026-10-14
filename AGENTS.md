@@ -33,6 +33,11 @@ changing anything.
   should come with a check in `mf1-render test` where it can be measured.
 - Firmware bugs that only lose data or hang (for example the transpose note-off hang) are
   documented rather than reproduced, unless the user asks otherwise.
+- **Faithful and Extended modes.** Faithful (the default) must sound exactly as the hardware.
+  MF-1-only extras (for example stereo width) belong in Extended mode only. They may act only after
+  the FM-1's signal path, and they never change what a patch's FM-1 data means: a patch shaped in
+  MF-1 must sound the same on a real FM-1. Never get a sound by adding processing to the
+  Faithful path. If a sound is out of the FM-1's reach, say so and use Extended for the extra.
 - The effect DSP is not published. The six effects are generic designs fitted to the published
   CC ranges and the community's measurements; update them when better measurements appear.
 

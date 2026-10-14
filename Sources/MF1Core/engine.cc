@@ -22,6 +22,8 @@
 #include "platform_audio.h"
 #include "platform_midi.h"
 #include "synth.h"
+#include "midifile.h"
+#include "songs.h"
 #include "sysex.h"
 
 using namespace mf1;
@@ -29,7 +31,8 @@ using namespace mf1;
 namespace {
 
 constexpr uint32_t kStateMagic = 0x5331464d;  // "MF1S"
-constexpr uint32_t kStateVersion = 1;
+// Version 2 added bank E; version 1 files hold banks A-D only.
+constexpr uint32_t kStateVersion = 2;
 
 struct Engine {
   Synth synth;
@@ -75,10 +78,7 @@ struct Engine {
 
   bool startAudio(const std::string& uid) {
     return audio.start(
-        [this](float* l, float* r, uint32_t n) {
-          synth.render(l, (int)n);
-          if (r) memcpy(r, l, sizeof(float) * n);
-        },
+        [this](float* l, float* r, uint32_t n) { synth.render(l, r, (int)n); },
         uid);
   }
 
@@ -260,7 +260,7 @@ struct Engine {
     int32_t g[16] = {globals.midiChannel, globals.fxChannel, globals.bendUp,     globals.bendDown,
                      globals.keyVelocity, globals.glideMode, globals.glideTime, globals.masterVolume,
                      globals.tempo,       globals.fm1Quirks, current,           transpose,
-                     haveFactory,         0,                 0,                 0};
+                     haveFactory,         globals.extended,  globals.stereoWidth, 0};
     put(out, g);
     put(out, patterns);
     return out;
@@ -341,10 +341,16 @@ struct Engine {
     fclose(f);
     Reader r{data.data(), data.size()};
     uint32_t head[3];
-    ok = ok && r.take(head, sizeof(head)) && head[0] == kStateMagic && head[1] == kStateVersion;
+    ok = ok && r.take(head, sizeof(head)) && head[0] == kStateMagic && (head[1] == 1 || head[1] == kStateVersion);
+    int stored = ok && head[1] == 1 ? kFaithfulPresets : kNumPresets;
     std::vector<Preset> b(bank, bank + kNumPresets), imp(imported, imported + kNumPresets);
-    for (int i = 0; ok && i < kNumPresets; i++) ok = readPreset(r, b[i]);
-    for (int i = 0; ok && i < kNumPresets; i++) ok = readPreset(r, imp[i]);
+    for (int i = 0; ok && i < stored; i++) ok = readPreset(r, b[i]);
+    for (int i = 0; ok && i < stored; i++) ok = readPreset(r, imp[i]);
+    if (ok && stored < kNumPresets) {
+      // An older state: bank E starts with its defaults.
+      extendedDefaults(b.data() + kFaithfulPresets);
+      std::copy(b.begin() + kFaithfulPresets, b.end(), imp.begin() + kFaithfulPresets);
+    }
     int32_t g[16];
     ok = ok && r.take(g, sizeof(g));
     // Patterns are stored raw; skip them if the layout changed.
@@ -365,6 +371,8 @@ struct Engine {
     globals.masterVolume = clampi(g[7], 0, 100);
     globals.tempo = clampi(g[8], 30, 300);
     globals.fm1Quirks = g[9] != 0;
+    globals.extended = g[13] != 0;
+    globals.stereoWidth = std::max(0, std::min(100, (int)g[14]));
     current = clampi(g[10], 0, kNumPresets - 1);
     transpose = clampi(g[11], -12, 12);
     haveFactory = g[12] != 0;
@@ -373,6 +381,22 @@ struct Engine {
     for (size_t i = 0; i < pats.size(); i++) patterns[i] = sanitizePattern(pats[i]);
     return Load::Loaded;
   }
+
+  // Bank E's defaults: the song patches first, then INIT VOICE.
+  static void extendedDefaults(Preset* e) {
+    const auto& all = songs();
+    for (int i = 0; i < 32; i++) {
+      Preset p;
+      memcpy(p.voice, kInitVoice, kVoiceSize);
+      if (i < (int)all.size()) {
+        memcpy(p.voice, all[i].voice, kVoiceSize);
+        for (auto& [cc, value] : all[i].fx) p.fx.set(cc, value);
+      }
+      e[i] = p;
+    }
+  }
+
+  int presetCount() const { return globals.extended ? kNumPresets : kFaithfulPresets; }
 
   // Moves an unreadable state file aside so nothing overwrites it. The
   // factory banks then load as on a first launch, since the copy is safe.
@@ -632,7 +656,7 @@ struct Engine {
         }
         for (uint32_t v = 0; v * 128 + 128 <= n; v++) {
           uint32_t slot = off / 128 + v;
-          if (slot >= kNumPresets) break;
+          if (slot >= kFaithfulPresets) break;  // the FM-1 has 128
           uint8_t vced[kVoiceSize];
           unpackVmem(&p.payload[8 + v * 128], vced);
           memcpy(bank[slot].voice, vced, kVoiceSize);
@@ -664,8 +688,8 @@ struct Engine {
             uint32_t at = off + i;
             uint32_t slot = at / 128;
             uint8_t vm[128] = {};
-            if (slot < kNumPresets) packVmem(bank[slot].voice, vm);
-            out.push_back(slot < kNumPresets ? vm[at % 128] : 0);
+            if (slot < kFaithfulPresets) packVmem(bank[slot].voice, vm);
+            out.push_back(slot < kFaithfulPresets ? vm[at % 128] : 0);
           }
         }
         reply(0x23, out);
@@ -769,6 +793,9 @@ bool mf1_import_factory_bank(int bank, const uint8_t* data, size_t len) {
     e->pushBankPreset(slot);
   }
   if (bank == 3) {
+    e->extendedDefaults(e->bank + kFaithfulPresets);
+    std::copy(e->bank + kFaithfulPresets, e->bank + kNumPresets, e->imported + kFaithfulPresets);
+    for (int i = kFaithfulPresets; i < kNumPresets; i++) e->pushBankPreset(i);
     e->haveFactory = true;
     e->loadPreset(e->current);
     e->saveState();
@@ -803,7 +830,8 @@ int mf1_current_preset(void) {
 
 void mf1_load_preset(int index) {
   LOCK;
-  E()->loadPreset((index % kNumPresets + kNumPresets) % kNumPresets);
+  int n = E()->presetCount();
+  E()->loadPreset((index % n + n) % n);
 }
 
 static void copyName(const uint8_t* v, char out[11]) {
@@ -952,7 +980,7 @@ void mf1_copy_voice(int from) {
 void mf1_reset_bank(int bank) {
   Engine* e = E();
   LOCK;
-  if (bank < 0 || bank > 3) return;
+  if (bank < 0 || bank > kExtendedBank) return;
   for (int i = bank * 32; i < bank * 32 + 32; i++) {
     e->bank[i] = e->imported[i];
     e->bank[i].fx = FxParams();
@@ -994,6 +1022,8 @@ int mf1_global_get(int id) {
     case MF1_G_VOLUME: return g.masterVolume;
     case MF1_G_TEMPO: return g.tempo;
     case MF1_G_QUIRKS: return g.fm1Quirks;
+    case MF1_G_EXTENDED: return g.extended;
+    case MF1_G_STEREO_WIDTH: return g.stereoWidth;
     case MF1_G_OCTAVE: return e->octave;
     case MF1_G_TRANSPOSE: return e->transpose;
   }
@@ -1016,6 +1046,8 @@ void mf1_global_set(int id, int v) {
     case MF1_G_VOLUME: g.masterVolume = c(v, 0, 100); break;
     case MF1_G_TEMPO: g.tempo = c(v, 30, 300); break;
     case MF1_G_QUIRKS: g.fm1Quirks = v != 0; break;
+    case MF1_G_EXTENDED: g.extended = v != 0; break;
+    case MF1_G_STEREO_WIDTH: g.stereoWidth = c(v, 0, 100); break;
     case MF1_G_OCTAVE: e->octave = c(v, -3, 3); return;
     case MF1_G_TRANSPOSE:
       e->transpose = c(v, -12, 12);
@@ -1297,7 +1329,7 @@ void mf1_export_bank(int bank, uint8_t out[4104]) {
   Engine* e = E();
   LOCK;
   uint8_t vmem[32 * 128];
-  bank = std::max(0, std::min(3, bank));
+  bank = std::max(0, std::min(kExtendedBank, bank));
   for (int v = 0; v < 32; v++) packVmem(e->bank[bank * 32 + v].voice, vmem + v * 128);
   auto msg = makeBankDump(vmem);
   memcpy(out, msg.data(), 4104);
@@ -1357,6 +1389,11 @@ void mf1_offline_init(double sampleRate) {
 
 void mf1_offline_render(float* out, int frames) {
   E()->synth.render(out, frames);
+  E()->drainNotes();
+}
+
+void mf1_offline_render_stereo(float* left, float* right, int frames) {
+  E()->synth.render(left, right, frames);
   E()->drainNotes();
 }
 
@@ -1425,4 +1462,81 @@ void mf1_set_output(const char* uid) {
   LOCK;
   e->outputUID = uid ? uid : "";
   e->restartAudio(e->outputUID);
+}
+
+// ------------------------------------------------------------------ songs
+
+int mf1_song_count(void) { return (int)songs().size(); }
+
+const char* mf1_song_name(int index) {
+  const auto& all = songs();
+  return index >= 0 && index < (int)all.size() ? all[index].name.c_str() : "";
+}
+
+namespace {
+
+// Loads a song's voice and effects (when given) into the edit buffer and
+// starts its notes. Without a voice the song plays the current one.
+void startSong(Engine* e, const Song* voiceFrom, const std::vector<SongEvent>& events, uint32_t length,
+               double tempo) {
+  Command play(Command::SongPlay, (int)std::lround(tempo * 100), (int)length);
+  play.c = voiceFrom ? voiceFrom->width : -1;
+  if (voiceFrom) {
+    // Like a received single voice: it can be kept with SAVE.
+    memcpy(e->edit.voice, voiceFrom->voice, kVoiceSize);
+    e->edit.fx = FxParams();
+    for (auto& [cc, value] : voiceFrom->fx) e->edit.fx.set(cc, value);
+    e->edit.mono = false;
+    e->edit.envOn = false;
+    e->dirty = true;
+    e->opMutes = 0;
+    e->pushEdit();
+    e->send(Command(Command::MuteOps, 0));
+  }
+  if (e->arpOn || e->seqOn) {
+    e->arpOn = e->seqOn = false;
+    e->recording = false;
+    e->send(Command(Command::ArpEnable, 0));
+    e->send(Command(Command::SeqEnable, 0));
+  }
+  e->send(Command(Command::SongClear));
+  for (size_t i = 0; i < events.size(); i += 24) {
+    Command c(Command::SongAdd);
+    c.song.count = (int)std::min<size_t>(24, events.size() - i);
+    for (int k = 0; k < c.song.count; k++) c.song.events[k] = events[i + k];
+    e->send(c);
+  }
+  e->send(play);
+  e->bump();
+}
+
+}  // namespace
+
+void mf1_song_play(int index) {
+  Engine* e = E();
+  LOCK;
+  const auto& all = songs();
+  if (index < 0 || index >= (int)all.size()) return;
+  const Song& song = all[index];
+  startSong(e, &song, song.events, song.length, song.tempo);
+}
+
+bool mf1_song_play_midi(const uint8_t* data, size_t len, int voiceSong) {
+  Engine* e = E();
+  MidiFileSong midi;
+  if (!readMidiFile(data, len, midi)) return false;
+  LOCK;
+  const auto& all = songs();
+  const Song* voice = voiceSong >= 0 && voiceSong < (int)all.size() ? &all[voiceSong] : nullptr;
+  startSong(e, voice, midi.events, midi.length, midi.tempo);
+  return true;
+}
+
+void mf1_song_stop(void) { E()->send(Command(Command::SongStop)); }
+
+bool mf1_song_playing(void) { return E()->synth.songPlaying.load(std::memory_order_relaxed); }
+
+int mf1_preset_count(void) {
+  LOCK;
+  return E()->presetCount();
 }

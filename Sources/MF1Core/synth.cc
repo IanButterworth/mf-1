@@ -44,6 +44,8 @@ void Synth::prepare(double sampleRate) {
   sr_ = sampleRate;
   Tables::init(sampleRate);
   fxChain_.prepare(sampleRate);
+  wideBuf_.assign((size_t)(0.03 * sampleRate) + 4, 0.f);
+  widePos_ = 0;
   fxChain_.setParams(edit_.fx);
   lfo_.reset(voice_ + 137);
   // The FM-1 line out: one pole 20 Hz high-pass and about 5.6 kHz low-pass.
@@ -467,6 +469,7 @@ void Synth::advanceClock(int frames) {
       i++;
     }
   }
+  if (songOn_) advanceSong(frames);
   if (!running_ || externalClock()) return;
   // A step due inside this block fires at its start, early by its offset.
   while (phase_ < frames && running_) {
@@ -480,6 +483,76 @@ void Synth::advanceClock(int frames) {
     phase_ += len;
   }
   phase_ -= frames;
+}
+
+// ------------------------------------------------------------------ extended
+
+// Extended mode only. Turns the mono block into left (block_) and right
+// (blockR_): the side signal is the difference of two slowly drifting
+// delayed copies, added to one side and taken from the other, so a mono
+// sum gives back exactly what the FM-1 would play.
+void Synth::widen() {
+  int width = !g_.extended ? 0 : (songOn_ && songWidth_ >= 0 ? songWidth_ : g_.stereoWidth);
+  float target = std::max(0, std::min(100, width)) / 100.f;
+  int len = (int)wideBuf_.size();
+  if (len == 0 || (target == 0 && wideAmount_ < 1e-4f)) {
+    wideAmount_ = 0;
+    memcpy(blockR_, block_, sizeof(blockR_));
+    return;
+  }
+  // The delays drift a fraction of a hertz, so once per block is plenty.
+  double a = std::sin(2 * M_PI * widePhase_ * 0.23), b = std::sin(2 * M_PI * widePhase_ * 0.31 + 1.7);
+  widePhase_ += N / sr_;
+  if (widePhase_ > 1000) widePhase_ -= 1000;
+  auto tap = [&](double ms) {
+    double rp = widePos_ - ms * 0.001 * sr_;
+    while (rp < 0) rp += len;
+    int i0 = (int)rp;
+    double f = rp - i0;
+    return (float)(wideBuf_[i0] * (1 - f) + wideBuf_[(i0 + 1) % len] * f);
+  };
+  for (int i = 0; i < N; i++) {
+    wideAmount_ += (target - wideAmount_) * 0.0005f;
+    float x = block_[i];
+    wideBuf_[widePos_] = x;
+    float side = 0.5f * (tap(13.0 + 1.5 * a) - tap(19.0 + 1.5 * b)) * wideAmount_ * 1.6f;
+    block_[i] = std::max(-1.f, std::min(1.f, x + side));
+    blockR_[i] = std::max(-1.f, std::min(1.f, x - side));
+    widePos_ = (widePos_ + 1) % len;
+  }
+}
+
+// ------------------------------------------------------------------ songs
+
+void Synth::advanceSong(int frames) {
+  double ticksPerSample = songTempo_ / 60.0 * kSongTicksPerBeat / sr_;
+  double end = songPos_ + frames * ticksPerSample;
+  while (songNext_ < songCount_ && songEvents_[songNext_].start < end) {
+    const SongEvent& e = songEvents_[songNext_++];
+    // Notes start on the block boundary, a little early; lengthen the
+    // note by the same amount so it still ends on time.
+    double early = std::max(0.0, (e.start - songPos_) / ticksPerSample);
+    uint32_t serial = playNote(e.note, e.velocity);
+    emit(0x90, e.note, e.velocity);
+    stepLateness_ = -early;
+    scheduleNoteOff(e.note, serial, std::max(64.0, e.length / ticksPerSample - 32.0));
+    stepLateness_ = 0;
+  }
+  songPos_ = end;
+  if (songPos_ >= songLength_ && songNext_ >= songCount_) {
+    songOn_ = false;
+    songPlaying.store(false, std::memory_order_relaxed);
+  }
+}
+
+void Synth::stopSong() {
+  songOn_ = false;
+  songPlaying.store(false, std::memory_order_relaxed);
+  for (int i = 0; i < pendingCount_; i++) {
+    releaseSerial(pendingOffs_[i].serial, pendingOffs_[i].note);
+    emit(0x80, (uint8_t)pendingOffs_[i].note, 0);
+  }
+  pendingCount_ = 0;
 }
 
 // ------------------------------------------------------------------ commands
@@ -562,6 +635,28 @@ void Synth::handle(const Command& c) {
     }
     case Command::AllNotesOff:
       allNotesOff();
+      break;
+    case Command::SongClear:
+      stopSong();
+      songCount_ = 0;
+      break;
+    case Command::SongAdd:
+      for (int i = 0; i < c.song.count && songCount_ < kMaxSongEvents; i++)
+        songEvents_[songCount_++] = c.song.events[i];
+      break;
+    case Command::SongPlay:
+      // a is the tempo in hundredths of a BPM, b the length in ticks, c the
+      // song's extended stereo width or -1.
+      songTempo_ = std::max(20.0, c.a / 100.0);
+      songWidth_ = c.c;
+      songLength_ = c.b;
+      songPos_ = 0;
+      songNext_ = 0;
+      songOn_ = songCount_ > 0;
+      songPlaying.store(songOn_, std::memory_order_relaxed);
+      break;
+    case Command::SongStop:
+      stopSong();
       break;
     case Command::ArpEnable:
       arpOn_ = c.a != 0;
@@ -762,7 +857,7 @@ void Synth::updateSounding() {
   soundingHi.store(hi, std::memory_order_relaxed);
 }
 
-void Synth::render(float* out, int frames) {
+void Synth::render(float* out, float* right, int frames) {
   uint64_t t0 = mach_absolute_time();
   float vol = g_.masterVolume / 100.f;
   vol *= vol;
@@ -795,10 +890,16 @@ void Synth::render(float* out, int frames) {
         block_[i] = std::max(-1.f, std::min(1.f, x));
       }
       scopePos.store(sp + N, std::memory_order_release);
+      widen();
       blockPos_ = 0;
     }
     int n = std::min(frames - done, N - blockPos_);
-    memcpy(out + done, block_ + blockPos_, sizeof(float) * n);
+    if (right) {
+      memcpy(out + done, block_ + blockPos_, sizeof(float) * n);
+      memcpy(right + done, blockR_ + blockPos_, sizeof(float) * n);
+    } else {
+      for (int i = 0; i < n; i++) out[done + i] = 0.5f * (block_[blockPos_ + i] + blockR_[blockPos_ + i]);
+    }
     blockPos_ += n;
     done += n;
   }

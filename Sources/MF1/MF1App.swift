@@ -11,6 +11,8 @@ struct MF1App: App {
     private let model = DeviceModel.shared
     @AppStorage("finish") private var finishName = "Black"
     @AppStorage("quirks") private var quirks = true
+    @AppStorage("extended") private var extended = false
+    @AppStorage("stereoWidth") private var stereoWidth = 100
     @AppStorage("frameless") private var frameless = true
 
     // Fonts must be registered before the first view is drawn, or SwiftUI
@@ -30,8 +32,8 @@ struct MF1App: App {
             CommandGroup(replacing: .newItem) {
                 Button("Import SysEx…") { Engine.openImportPanel() }.keyboardShortcut("o")
                 Menu("Export Bank") {
-                    ForEach(0..<4) { b in
-                        Button("Bank \(["A", "B", "C", "D"][b]) (\(b * 32 + 1)–\(b * 32 + 32))…") { Engine.exportBank(b) }
+                    ForEach(0..<5) { b in
+                        Button("\(Engine.bankTitle(b)) (\(b * 32 + 1)–\(b * 32 + 32))…") { Engine.exportBank(b) }
                     }
                 }
                 Button("Export Current Voice…") { Engine.exportVoice() }.keyboardShortcut("e")
@@ -42,17 +44,33 @@ struct MF1App: App {
                 Picker("Finish", selection: $finishName) {
                     ForEach(Finish.all, id: \.name) { Text($0.name).tag($0.name) }
                 }
-                Toggle("Frameless Window", isOn: $frameless)
+                Toggle("Frameless Window", isOn: applying($frameless) { delegate.setFrameless($0) })
                     .keyboardShortcut("f", modifiers: [.command, .control])
-                    .onChange(of: frameless) { _, v in delegate.setFrameless(v) }
+            }
+            CommandMenu("Songs") {
+                SongMenu(model: model)
             }
             CommandMenu("Patches") {
                 PatchMenu(model: model)
             }
             CommandMenu("Device") {
                 OutputMenu()
-                Toggle("FM-1 V15 Hardware Behaviour", isOn: $quirks)
-                    .onChange(of: quirks) { _, v in mf1_global_set(Int32(MF1_G_QUIRKS), v ? 1 : 0) }
+                // Faithful sounds exactly like the hardware; Extended adds MF-1
+                // extras after the FM-1 signal path, and never changes patch data.
+                // Can be flipped at any time, also during a song, to compare.
+                Toggle("Extended Mode (MF-1 extras)", isOn: applying($extended) { v in
+                    mf1_global_set(Int32(MF1_G_EXTENDED), v ? 1 : 0)
+                    model.objectWillChange.send()
+                })
+                .keyboardShortcut("e", modifiers: [.command, .control])
+                Picker("Stereo Width", selection: applying($stereoWidth) { mf1_global_set(Int32(MF1_G_STEREO_WIDTH), Int32($0)) }) {
+                    Text("Mono").tag(0)
+                    Text("Wide").tag(60)
+                    Text("Very Wide").tag(100)
+                }
+                .disabled(!extended)
+                Divider()
+                Toggle("FM-1 V15 Hardware Behaviour", isOn: applying($quirks) { mf1_global_set(Int32(MF1_G_QUIRKS), $0 ? 1 : 0) })
                 Divider()
                 Button("All Notes Off") { mf1_all_notes_off() }.keyboardShortcut(".", modifiers: .command)
                 Button("Restore Factory Banks…") {
@@ -138,6 +156,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model = DeviceModel.shared
         let quirks = UserDefaults.standard.object(forKey: "quirks") as? Bool ?? true
         mf1_global_set(Int32(MF1_G_QUIRKS), quirks ? 1 : 0)
+        let defaults = UserDefaults.standard
+        mf1_global_set(Int32(MF1_G_EXTENDED), defaults.bool(forKey: "extended") ? 1 : 0)
+        mf1_global_set(Int32(MF1_G_STEREO_WIDTH), Int32(defaults.object(forKey: "stereoWidth") as? Int ?? 100))
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] e in
             self?.handle(e) == true ? nil : e
         }
@@ -376,11 +397,10 @@ struct OutputMenu: View {
     @AppStorage("outputUID") private var outputUID = ""
 
     var body: some View {
-        Picker("Audio Output", selection: $outputUID) {
+        Picker("Audio Output", selection: applying($outputUID) { mf1_set_output($0) }) {
             Text("System Default").tag("")
             ForEach(outputs.devices, id: \.uid) { Text($0.name).tag($0.uid) }
         }
-        .onChange(of: outputUID) { _, v in mf1_set_output(v) }
     }
 }
 
@@ -394,8 +414,8 @@ struct PatchMenu: View {
         Button("Previous Patch") { model.turnPresets(-1) }
             .keyboardShortcut(.leftArrow, modifiers: .command)
         Divider()
-        ForEach(0..<4) { bank in
-            Menu("Bank \(["A", "B", "C", "D"][bank])") {
+        ForEach(0..<list.bankCount, id: \.self) { bank in
+            Menu(Engine.bankTitle(bank)) {
                 ForEach(bank * 32..<bank * 32 + 32, id: \.self) { i in
                     let name = i < list.names.count ? list.names[i] : ""
                     Toggle(String(format: "%03d  %@", i + 1, name), isOn: Binding(
@@ -405,4 +425,31 @@ struct PatchMenu: View {
             }
         }
     }
+}
+
+struct SongMenu: View {
+    let model: DeviceModel
+    @ObservedObject private var library = SongLibrary.shared
+
+    var body: some View {
+        ForEach(library.songs) { song in
+            Button(song.name) { model.playSong(song) }
+        }
+        Divider()
+        Button("Stop Song") { mf1_song_stop() }
+            .keyboardShortcut(".", modifiers: [.command, .shift])
+        Divider()
+        Button("Add Song from MIDI File…") { library.addFromPanel() }
+        Button("Show Songs Folder") { NSWorkspace.shared.open(SongLibrary.folder) }
+    }
+}
+
+// A binding that applies a setting the moment it changes. Change handlers on
+// menu items run late, only when the menus are next rebuilt.
+func applying<T: Equatable>(_ binding: Binding<T>, _ apply: @escaping (T) -> Void) -> Binding<T> {
+    Binding(get: { binding.wrappedValue }, set: { v in
+        guard v != binding.wrappedValue else { return }
+        binding.wrappedValue = v
+        apply(v)
+    })
 }

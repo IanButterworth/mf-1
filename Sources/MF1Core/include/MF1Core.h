@@ -36,6 +36,8 @@ void mf1_mod_wheel(int value);
 
 // ---- presets and the edit buffer
 int mf1_current_preset(void);
+// 128 (banks A-D, as on the FM-1), or 160 in extended mode with bank E.
+int mf1_preset_count(void);
 void mf1_load_preset(int index);
 void mf1_preset_name(int index, char out[11]);
 void mf1_edit_name(char out[11]);
@@ -69,6 +71,8 @@ int mf1_carrier_mask(int algorithm);
 enum {
   MF1_G_MIDI_CH, MF1_G_FX_CH, MF1_G_BEND_UP, MF1_G_BEND_DOWN, MF1_G_VELOCITY, MF1_G_GLIDE_MODE,
   MF1_G_GLIDE_TIME, MF1_G_VOLUME, MF1_G_TEMPO, MF1_G_QUIRKS, MF1_G_OCTAVE, MF1_G_TRANSPOSE,
+  // Extended mode: MF-1 additions after the FM-1 signal path, ignored when off.
+  MF1_G_EXTENDED, MF1_G_STEREO_WIDTH,
   MF1_G_COUNT
 };
 int mf1_global_get(int id);
@@ -107,6 +111,19 @@ int mf1_seq_play_step(void);
 // Bit i set when step i of the current pattern has notes.
 int mf1_seq_step_mask(void);
 
+// ---- pre-programmed songs
+int mf1_song_count(void);
+const char* mf1_song_name(int index);
+// Loads the song's voice and effects into the edit buffer (unsaved, so it
+// can be kept with SAVE), turns ARP and SEQ off, and plays the song.
+void mf1_song_play(int index);
+// Plays the notes of a Standard MIDI File (drums skipped). With voiceSong
+// at a built-in song's index, that song's voice and effects are loaded;
+// with -1 the current voice plays it. False if it is not a MIDI file.
+bool mf1_song_play_midi(const uint8_t* data, size_t len, int voiceSong);
+void mf1_song_stop(void);
+bool mf1_song_playing(void);
+
 // ---- SysEx import / export
 // Returns 1 for a 32 voice bank (waits for a bank choice), 2 for a single
 // voice (loaded into the edit buffer), 0 if not understood.
@@ -143,6 +160,7 @@ const char* mf1_midi_port_name(void);
 // ---- offline rendering, for tests and benchmarks; no audio device.
 void mf1_offline_init(double sampleRate);
 void mf1_offline_render(float* out, int frames);
+void mf1_offline_render_stereo(float* left, float* right, int frames);
 // Feeds one complete MIDI message as if it arrived on the MIDI port.
 void mf1_inject_midi(const uint8_t* data, size_t len);
 // In offline mode, MIDI the engine would send is kept; this takes the

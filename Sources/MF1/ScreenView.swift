@@ -66,6 +66,13 @@ struct ScreenView: View {
         let titleColor = home ? Color(white: 0.92) : Self.ink
         text(&ctx, model.presetTitle, CGPoint(x: 7, y: 16), size: 18, color: titleColor, anchor: .leading)
         drawBattery(&ctx, color: titleColor)
+        if mf1_global_get(Int32(MF1_G_EXTENDED)) != 0 {
+            // Extended mode marker, so it is always clear the sound may go
+            // beyond what an FM-1 can play.
+            let r = CGRect(x: 172, y: 8, width: 30, height: 15)
+            ctx.stroke(Path(roundedRect: r, cornerRadius: 3), with: .color(titleColor.opacity(0.8)), lineWidth: 1)
+            text(&ctx, "EXT", CGPoint(x: r.midX, y: r.midY), size: 10, color: titleColor, weight: .semibold)
+        }
         ctx.fill(Path(CGRect(x: 0, y: 31, width: 240, height: 1)), with: .color(titleColor.opacity(0.35)))
 
         if overlayActive {
@@ -189,7 +196,8 @@ struct ScreenView: View {
         case .presets:
             let cur = model.preset
             for row in -2...2 {
-                let i = ((cur + row) % 128 + 128) % 128
+                let n = Int(mf1_preset_count())
+                let i = ((cur + row) % n + n) % n
                 let r = ScreenLayout.presetRow(row)
                 if row == 0 { box(&ctx, r, radius: 6) }
                 text(&ctx, String(format: "%03d %@", i + 1, Engine.presetName(i)), CGPoint(x: 26, y: r.midY),

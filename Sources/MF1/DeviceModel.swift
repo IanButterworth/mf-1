@@ -377,7 +377,8 @@ final class DeviceModel: ObservableObject {
         }
         if copying != nil {
             if k == 3 {
-                copying = ((copying! + delta) % 128 + 128) % 128
+                let n = Int(mf1_preset_count())
+                copying = ((copying! + delta) % n + n) % n
             } else if k == 2 && delta < 0 {
                 copying = nil
             }
@@ -447,7 +448,8 @@ final class DeviceModel: ObservableObject {
     // voice under them would change what they act on.
     func turnPresets(_ delta: Int) {
         guard delta != 0, !seqOn, !overlayOpen else { return }
-        mf1_load_preset(Int32(((preset + delta) % 128 + 128) % 128))
+        let n = Int(mf1_preset_count())
+        mf1_load_preset(Int32(((preset + delta) % n + n) % n))
         show(.presets, for: 1.2)
         objectWillChange.send()
     }
@@ -463,6 +465,17 @@ final class DeviceModel: ObservableObject {
         }
         mf1_load_preset(Int32(index))
         show(.presets, for: 1.2)
+        objectWillChange.send()
+    }
+
+    // Plays a pre-programmed song with its own voice, from HOME so the
+    // scope shows it.
+    func playSong(_ song: SongLibrary.Entry) {
+        renaming = nil
+        copying = nil
+        resetting = false
+        mode = .home
+        flash(SongLibrary.shared.play(song) ? "Playing Song" : "Not a MIDI File")
         objectWillChange.send()
     }
 
@@ -905,16 +918,19 @@ final class PatchList: ObservableObject {
     static let shared = PatchList()
     @Published private(set) var names: [String] = []
     @Published private(set) var current = 0
+    @Published private(set) var bankCount = 4
     private var generation: UInt32 = .max
 
     func refresh(generation g: UInt32) {
         let c = Int(mf1_current_preset())
         if g != generation || names.isEmpty {
             generation = g
-            let n = (0..<128).map { Engine.presetName($0) }
+            let n = (0..<160).map { Engine.presetName($0) }
             if n != names { names = n }
         }
         if c != current { current = c }
+        let banks = Int(mf1_preset_count()) / 32
+        if banks != bankCount { bankCount = banks }
     }
 }
 
@@ -1005,7 +1021,8 @@ extension DeviceModel {
                 if mode == .edit { editPages[editTarget] = next } else { pages[mode] = next }
             }
         case .presetRow(let r):
-            if r == 0 { popup = nil } else { selectPreset(((preset + r) % 128 + 128) % 128) }
+            let n = Int(mf1_preset_count())
+            if r == 0 { popup = nil } else { selectPreset(((preset + r) % n + n) % n) }
         case .popup:
             popup = nil
         case .bankBox(let i):
@@ -1049,7 +1066,7 @@ extension DeviceModel {
     func presetMenu() -> NSMenu {
         let menu = NSMenu()
         let current = preset
-        for bank in 0..<4 {
+        for bank in 0..<Int(mf1_preset_count()) / 32 {
             let sub = NSMenu()
             for i in bank * 32..<bank * 32 + 32 {
                 let item = ClosureMenuItem(title: String(format: "%03d  %@", i + 1, Engine.presetName(i))) { [weak self] in
@@ -1058,7 +1075,7 @@ extension DeviceModel {
                 item.state = i == current ? .on : .off
                 sub.addItem(item)
             }
-            let head = NSMenuItem(title: "Bank \(["A", "B", "C", "D"][bank])", action: nil, keyEquivalent: "")
+            let head = NSMenuItem(title: Engine.bankTitle(bank), action: nil, keyEquivalent: "")
             head.submenu = sub
             head.state = current / 32 == bank ? .mixed : .off
             menu.addItem(head)

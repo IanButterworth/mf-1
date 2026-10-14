@@ -52,6 +52,10 @@ enum Engine {
         }
     }
 
+    static func bankTitle(_ bank: Int) -> String {
+        bank == 4 ? "Bank E (Extended)" : "Bank \(["A", "B", "C", "D"][max(0, min(3, bank))])"
+    }
+
     static func editName() -> String {
         var buf = [CChar](repeating: 0, count: 11)
         mf1_edit_name(&buf)
@@ -93,7 +97,7 @@ enum Engine {
     static func exportBank(_ bank: Int) {
         var buf = [UInt8](repeating: 0, count: 4104)
         mf1_export_bank(Int32(bank), &buf)
-        save(Data(buf), name: "MF-1 Bank \(["A", "B", "C", "D"][bank]).syx")
+        save(Data(buf), name: "MF-1 \(bankTitle(bank)).syx")
     }
 
     static func exportVoice() {
@@ -140,5 +144,77 @@ final class AudioOutputs: ObservableObject {
     private func reload() {
         let list = Engine.outputs().map { Device(name: $0.name, uid: $0.uid) }
         if list != devices { devices = list }
+    }
+}
+
+// The Songs menu: the built-in songs, then MIDI files in the Songs folder.
+// A MIDI file named like a built-in song replaces its notes but keeps its
+// voice and effects; other files play with the current voice.
+final class SongLibrary: ObservableObject {
+    static let shared = SongLibrary()
+
+    struct Entry: Identifiable {
+        var name: String
+        var builtIn: Int?   // index of the built-in song whose voice it uses
+        var file: URL?      // MIDI file with the notes, if any
+        var id: String { name }
+    }
+
+    @Published private(set) var songs: [Entry] = []
+
+    static var folder: URL {
+        let dir = Engine.stateDirectory.appendingPathComponent("Songs", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private init() {
+        refresh()
+        NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil,
+                                               queue: .main) { [weak self] _ in self?.refresh() }
+    }
+
+    func refresh() {
+        let files = ((try? FileManager.default.contentsOfDirectory(at: Self.folder, includingPropertiesForKeys: nil)) ?? [])
+            .filter { ["mid", "midi"].contains($0.pathExtension.lowercased()) }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+        var byName: [String: URL] = [:]
+        for f in files { byName[f.deletingPathExtension().lastPathComponent.lowercased()] = f }
+        var list: [Entry] = []
+        for i in 0..<Int(mf1_song_count()) {
+            let name = String(cString: mf1_song_name(Int32(i)))
+            list.append(Entry(name: name, builtIn: i, file: byName.removeValue(forKey: name.lowercased())))
+        }
+        for f in files where byName[f.deletingPathExtension().lastPathComponent.lowercased()] != nil {
+            list.append(Entry(name: f.deletingPathExtension().lastPathComponent, builtIn: nil, file: f))
+        }
+        if list.map(\.name) != songs.map(\.name) || list.map(\.file) != songs.map(\.file) { songs = list }
+    }
+
+    // Returns false if a MIDI file could not be read.
+    @discardableResult
+    func play(_ song: Entry) -> Bool {
+        guard let file = song.file else {
+            if let i = song.builtIn { mf1_song_play(Int32(i)) }
+            return true
+        }
+        guard let data = try? Data(contentsOf: file) else { return false }
+        return data.withUnsafeBytes { raw in
+            mf1_song_play_midi(raw.bindMemory(to: UInt8.self).baseAddress, data.count, Int32(song.builtIn ?? -1))
+        }
+    }
+
+    func addFromPanel() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "mid") ?? .midi, .midi]
+        panel.allowsMultipleSelection = true
+        panel.message = "Choose MIDI files to add to the Songs menu"
+        guard panel.runModal() == .OK else { return }
+        for url in panel.urls {
+            let dest = Self.folder.appendingPathComponent(url.lastPathComponent)
+            try? FileManager.default.removeItem(at: dest)
+            do { try FileManager.default.copyItem(at: url, to: dest) } catch { Engine.alert(error.localizedDescription) }
+        }
+        refresh()
     }
 }

@@ -82,6 +82,24 @@ The screen also works by mouse:
 - Click the bottom bar for the next page.
 - Click the voice name for a menu of every preset, or drag on the name to scroll through them.
 
+MF-1 is faithful to the FM-1 by default: everything sounds as it would on the hardware. Device ›
+Extended Mode (⌃⌘E) turns on MF-1 extras that act only after the FM-1's signal path, such as
+Device › Stereo Width. Patch data never changes meaning, so a patch made in MF-1 sounds the same
+on a real FM-1 (without the extras). The screen shows EXT while it is on, and it can be switched
+at any time, also during a song, to compare. Extended mode also adds bank E (Extended), presets
+129–160, beyond the FM-1's 128. It starts with the song patches (129 is RIGHTPLACE), and its voices
+are ordinary DX7 voices that a real FM-1 can load into banks A–D.
+
+The Songs menu plays pre-programmed songs with their own voice and effects. The voice lands in
+the edit buffer like a received single voice, so you can play it yourself and keep it with SAVE.
+Stop Song is ⇧⌘. (Shift-Command-period).
+
+Songs › Add Song from MIDI File… copies Standard MIDI Files into
+`~/Library/Application Support/MF-1/Songs/` and lists them in the menu (drums are skipped). A
+file named like a built-in song, such as `Everything In Its Right Place.mid`, replaces that
+song's notes and keeps its voice and effects. Other files play with the current voice. MIDI
+files are not bundled with the app: add your own.
+
 Hold SAVE to save, as on the hardware. The window is frameless by default: drag any bare part of
 the case to move it, and use ⌘W or ⌘Q to close. View › Frameless Window (⌃⌘F) switches to a
 normal window. Help › MF-1 Keyboard and Controls lists the rest.

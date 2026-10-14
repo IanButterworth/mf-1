@@ -494,6 +494,124 @@ static int test() {
     mf1_global_set(MF1_G_TEMPO, 120);
   }
 
+  // Songs: the first chords land on their beats at the song's tempo.
+  {
+    drainOut();
+    mf1_song_play(0);
+    std::vector<double> starts;
+    for (int block = 0; block < (int)(kRate * 6) / 256; block++) {
+      render(256);
+      for (auto m = takeOut(); !m.empty(); m = takeOut())
+        if (m[0] == 0x90 && m[1] < 56) starts.push_back(block * 256 / kRate);
+    }
+    mf1_song_stop();
+    render(4800);
+    drainOut();
+    // 124 BPM: the second chord 6 beats after the first, the third 4 later.
+    double beat = 60.0 / 124;
+    bool ok = starts.size() >= 3 && std::fabs(starts[1] - starts[0] - 6 * beat) < 0.01 &&
+              std::fabs(starts[2] - starts[1] - 4 * beat) < 0.01;
+    printf("     song chords at:");
+    for (double t : starts) printf(" %.3f", t);
+    printf("\n");
+    check(ok, "song plays its chords on the beat");
+  }
+
+  // Faithful mode is exactly mono even when a song asks for width; in
+  // extended mode the channels differ but still fold back to the same mono.
+  {
+    auto renderSong = [](bool extended, std::vector<float>& l, std::vector<float>& r) {
+      mf1_global_set(MF1_G_EXTENDED, extended);
+      mf1_global_set(MF1_G_STEREO_WIDTH, 100);
+      mf1_song_play(0);
+      l.assign(48000, 0);
+      r.assign(48000, 0);
+      for (int i = 0; i < 48000; i += 256) mf1_offline_render_stereo(&l[i], &r[i], 256);
+      mf1_song_stop();
+      std::vector<float> rest(48000 * 3), rest2(48000 * 3);
+      mf1_offline_render_stereo(rest.data(), rest2.data(), 48000 * 3);
+      drainOut();
+    };
+    std::vector<float> fl, fr, el, er;
+    renderSong(false, fl, fr);
+    bool mono = fl == fr;
+    // The scope holds the mono FM-1 signal before MASTER, so the average of
+    // the extended channels must equal it times the volume gain.
+    mf1_global_set(MF1_G_EXTENDED, 1);
+    mf1_global_set(MF1_G_STEREO_WIDTH, 100);
+    mf1_song_play(0);
+    std::vector<float> l(48000), r(48000), scope(1024);
+    for (int i = 0; i < 48000; i += 64) mf1_offline_render_stereo(&l[i], &r[i], 64);
+    mf1_scope(scope.data(), 1024);
+    mf1_song_stop();
+    renderSong(false, el, er);
+    mf1_global_set(MF1_G_EXTENDED, 0);
+    float vol = mf1_global_get(MF1_G_VOLUME) / 100.f;
+    vol *= vol;
+    // The scope is written a 64 sample block at a time, so earlier tests can
+    // leave it up to a block out of step with the delivered output.
+    double diff = 0, fold = 1e9;
+    for (int lag = -64; lag <= 64; lag++) {
+      double worst = 0;
+      for (int i = 64; i < 960; i++) {
+        size_t k = l.size() - 1024 + i;
+        worst = std::max(worst, (double)std::fabs(0.5f * (l[k] + r[k]) - scope[i + lag] * vol));
+      }
+      fold = std::min(fold, worst);
+    }
+    for (size_t k = l.size() - 1024; k < l.size(); k++) diff = std::max(diff, (double)std::fabs(l[k] - r[k]));
+    check(mono, "faithful mode output is exactly mono");
+    check(diff > 0.01, "extended mode widens a song that asks for it");
+    check(fold < 1e-4, "extended stereo folds back to the faithful mono sound");
+  }
+
+  // The mode can be switched while a song plays: wide straight away, and
+  // back to exactly mono once the width has faded out.
+  {
+    std::vector<float> l(48000), r(48000);
+    auto second = [&] {
+      for (int i = 0; i < 48000; i += 64) mf1_offline_render_stereo(&l[i], &r[i], 64);
+      double d = 0;
+      for (int i = 24000; i < 48000; i++) d = std::max(d, (double)std::fabs(l[i] - r[i]));
+      return d;
+    };
+    mf1_global_set(MF1_G_EXTENDED, 0);
+    mf1_song_play(0);
+    double a = second();
+    mf1_global_set(MF1_G_EXTENDED, 1);
+    double b = second();
+    mf1_global_set(MF1_G_EXTENDED, 0);
+    second();
+    double c = second();
+    mf1_song_stop();
+    render(48000 * 3);
+    drainOut();
+    check(a == 0 && b > 0.01 && c == 0, "extended mode switches on and off during a song");
+  }
+
+  // Bank E exists only in extended mode, and starts with the song patches.
+  {
+    // Offline, a preset change reaches the synth only when audio renders.
+    auto load = [](int i) {
+      mf1_load_preset(i);
+      render(64);
+      return mf1_current_preset();
+    };
+    mf1_global_set(MF1_G_EXTENDED, 0);
+    bool faithful = mf1_preset_count() == 128;
+    bool wrapsFaithful = load(128) == 0;  // wraps to 001 when faithful
+    mf1_global_set(MF1_G_EXTENDED, 1);
+    bool extended = mf1_preset_count() == 160;
+    char e1[11];
+    mf1_preset_name(128, e1);
+    bool reachable = load(128) == 128;
+    bool wrapsExtended = load(160) == 0;  // wraps to 001 when extended
+    mf1_global_set(MF1_G_EXTENDED, 0);
+    check(faithful && wrapsFaithful, "faithful mode has the FM-1's 128 presets");
+    check(extended && reachable && wrapsExtended, "extended mode adds bank E, presets 129-160");
+    check(strncmp(e1, "RIGHTPLACE", 10) == 0, "bank E starts with the RIGHTPLACE patch at 129");
+  }
+
   char name[11];
   mf1_preset_name(0, name);
   printf("     preset 001 is '%s'\n", name);
@@ -557,6 +675,8 @@ static void bench() {
   printf("12 voices, FX off:  %.1fx realtime, %.2f%% of one core\n", seconds / dt, 100.0 * dt / seconds);
 }
 
+static void writeWav(const char* path, const std::vector<float>& a);
+
 static void wav(int preset, const char* path, int note) {
   mf1_load_preset(preset);
   render(4800);
@@ -566,6 +686,10 @@ static void wav(int preset, const char* path, int note) {
   mf1_inject_midi(off, 3);
   auto b = render((int)kRate * 2);
   a.insert(a.end(), b.begin(), b.end());
+  writeWav(path, a);
+}
+
+static void writeWav(const char* path, const std::vector<float>& a) {
   FILE* f = fopen(path, "wb");
   uint32_t dataBytes = (uint32_t)a.size() * 2;
   uint32_t rate = (uint32_t)kRate;
@@ -588,6 +712,56 @@ static void wav(int preset, const char* path, int note) {
   printf("wrote %s\n", path);
 }
 
+// Renders the first seconds of a pre-programmed song with its own voice.
+static void song(int index, const char* path, double seconds) {
+  mf1_song_play(index);
+  writeWav(path, render((int)(kRate * seconds)));
+}
+
+// Prints the level of one held note from a song's voice in 50 ms steps,
+// to check its envelope: 1.5 s held, then released.
+static void songEnvelope(int index) {
+  mf1_song_play(index);
+  mf1_song_stop();
+  render(9600);
+  uint8_t on[] = {0x90, 60, 100}, off[] = {0x80, 60, 0};
+  mf1_inject_midi(on, 3);
+  auto a = render((int)(kRate * 1.5));
+  mf1_inject_midi(off, 3);
+  auto b = render((int)(kRate * 2.5));
+  a.insert(a.end(), b.begin(), b.end());
+  int win = (int)(kRate * 0.05);
+  float first = 0;
+  for (size_t i = 0; i + win <= a.size(); i += win) {
+    double sum = 0;
+    for (int k = 0; k < win; k++) sum += a[i + k] * a[i + k];
+    float rms = (float)std::sqrt(sum / win);
+    if (i == 0 || first == 0) first = std::max(first, rms);
+    printf("%5.2f s %6.1f dB\n", i / kRate, 20 * std::log10(std::max(1e-6f, rms / first)));
+  }
+}
+
+// Plays a MIDI file with a built-in song's voice (1-based, 0 = current
+// voice), prints the first note-on times and writes the first seconds.
+static void midiSong(const char* file, int voiceSong, const char* path, double seconds) {
+  auto data = readFile(file);
+  drainOut();
+  if (!mf1_song_play_midi(data.data(), data.size(), voiceSong - 1)) {
+    printf("not a MIDI file\n");
+    return;
+  }
+  std::vector<float> out;
+  std::vector<std::pair<double, int>> starts;
+  for (int block = 0; block < (int)(kRate * seconds) / 256; block++) {
+    auto b = render(256);
+    out.insert(out.end(), b.begin(), b.end());
+    for (auto m = takeOut(); !m.empty(); m = takeOut())
+      if (m[0] == 0x90 && starts.size() < 12) starts.push_back({block * 256 / kRate, m[1]});
+  }
+  for (auto& [t, n] : starts) printf("%.3f s note %d\n", t, n);
+  writeWav(path, out);
+}
+
 int main(int argc, char** argv) {
   if (argc < 3) {
     fprintf(stderr, "usage: mf1-render <banks dir> test|bench|wav <preset> <out.wav> [note]\n");
@@ -602,6 +776,9 @@ int main(int argc, char** argv) {
     return failed ? 1 : 0;
   }
   if (mode == "bench") bench();
+  if (mode == "song" && argc >= 5) song(atoi(argv[3]) - 1, argv[4], argc > 5 ? atof(argv[5]) : 60);
+  if (mode == "midi" && argc >= 6) midiSong(argv[3], atoi(argv[4]), argv[5], argc > 6 ? atof(argv[6]) : 60);
+  if (mode == "songenv" && argc >= 4) songEnvelope(atoi(argv[3]) - 1);
   if (mode == "wav" && argc >= 5) wav(atoi(argv[3]) - 1, argv[4], argc > 5 ? atoi(argv[5]) : 60);
   return 0;
 }
