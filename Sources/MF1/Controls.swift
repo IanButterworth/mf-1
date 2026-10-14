@@ -40,7 +40,11 @@ struct Finish {
                                   keybed: Color(hex: 0x4d6c92), tray: Color(hex: 0x4e6b8e),
                                   button: Color(hex: 0x4f6c90), legend: Color(hex: 0xffffff), unlitLegend: Color(hex: 0xc5d3e2),
                                   label: Color(hex: 0x3b4655), keyLabel: Color(hex: 0xdce5ef), slit: Color(hex: 0x2b3d55))
-    static let all = [black, purple, orange, blackGreen, coolGray, whiteBlue]
+    static let whiteGreen = Finish(name: "White-Green", caseTop: Color(hex: 0xf2ede7), caseBottom: Color(hex: 0xe2dbd3),
+                                   keybed: Color(hex: 0x66c6b7), tray: Color(hex: 0x5cc0b0),
+                                   button: Color(hex: 0x74cdc0), legend: Color(hex: 0xffffff), unlitLegend: Color(hex: 0x24443f),
+                                   label: Color(hex: 0x3b4655), keyLabel: Color(hex: 0x1f3a36), slit: Color(hex: 0x1d2f2c))
+    static let all = [black, purple, orange, blackGreen, coolGray, whiteBlue, whiteGreen]
 }
 
 extension Color {

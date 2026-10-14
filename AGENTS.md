@@ -1,0 +1,116 @@
+# MF-1: agent instructions
+
+MF-1 is a native macOS emulator of the M-VAVE FM-1 pocket FM synthesizer. Read this before
+changing anything.
+
+## Goals
+
+1. **Honest parity with the hardware.** The FM-1 should look, sound and behave the same in
+   MF-1: the same panel, screens, pages, knob mappings, button and LED behaviour, presets, MIDI
+   and SysEx. When the hardware does something odd, reproduce it and document it. Never
+   "improve" behaviour silently.
+2. **Patch loading the way the community does it.** Anything that works with a real FM-1 over
+   MIDI should work with MF-1's virtual port:
+   - Web librarians and editors.
+   - Dexed parameter changes.
+   - DX7 bank and voice dumps.
+   - M-VAVE's own restore tool and its private `00 59` protocol.
+3. **Performance and latency.**
+   - The audio thread never locks, allocates or blocks.
+   - Key-to-sound time is kept as low as the output device allows.
+   - The UI must not delay input. Redraw only what changes.
+4. **Clear about uncertainty.** Where the community's research disagrees or is incomplete,
+   say so in code comments, the README's "Known differences" and `docs/research/`. Don't
+   guess silently.
+
+## How parity is organised
+
+- The engine is Google's msfa, because the FM-1 firmware runs msfa itself, with tables identical
+  byte for byte. Measured deviations of FM-1 firmware from msfa sit behind one switch
+  (`fm1Quirks`, Device › FM-1 V15 Hardware Behaviour, on by default). With it off the engine is
+  clean msfa.
+- Each quirk must cite its measurement source in `docs/research/fm1-protocol-and-engine.md`, and
+  should come with a check in `mf1-render test` where it can be measured.
+- Firmware bugs that only lose data or hang (for example the transpose note-off hang) are
+  documented rather than reproduced, unless the user asks otherwise.
+- The effect DSP is not published. The six effects are generic designs fitted to the published
+  CC ranges and the community's measurements; update them when better measurements appear.
+
+## Keeping up with the community
+
+The FM-1 is new (2026) and people are still reverse-engineering it. Firmware updates change
+behaviour, and measurements get refined. **Check the sources below periodically, and whenever
+starting a substantial piece of work.** Then update MF-1 and `docs/research/` to match.
+
+Check:
+- M-VAVE firmware release notes, for new firmware versions and features:
+  https://yms-file-store.oss-cn-hongkong.aliyuncs.com/software/releaseNote/firmware/FM-1.txt
+- M-VAVE's MIDI implementation document:
+  https://yms-file-store.oss-cn-hongkong.aliyuncs.com/software/releaseNote/firmware/FM-1%20MIDI%20EN.docx
+- The user manual: https://manualf.oss-cn-hongkong.aliyuncs.com/manual/MIDI-KEYBOARD/FM-1-manual.pdf
+- Community index: https://github.com/cicloid/awesome-fm-1 (start here; it links new projects).
+- Firmware reverse engineering: https://github.com/AL-255/FM-1-RE
+- Hardware measurements: https://github.com/thegiantsnail/fm1-workbench-public (`FINDINGS.md`)
+  and https://github.com/jbschooley/Virtual-FM-1 (`docs/HARDWARE-NOTES.md`).
+- Factory presets and protocol captures: https://github.com/KingParamount/fm1-factory-presets
+- Librarian and evidence ledger: https://github.com/benny-sparra/fm1-dx7-patch-importer
+- SysEx tools: https://github.com/czietz/fm1-read-voice
+- Discussion: the Elektronauts thread (https://www.elektronauts.com/t/m-vave-fm-1/252170) and
+  the KVR thread (https://www.kvraudio.com/forum/viewtopic.php?t=632127).
+
+When something new turns up:
+1. Record it in `docs/research/` with its source URL, firmware version and confidence:
+   confirmed, measured, inferred or conflict.
+2. If it changes behaviour, implement it. Put firmware deviations behind `fm1Quirks`, and name
+   the firmware version in the comment or commit.
+3. Add or update a check in `Sources/mf1-render/main.cc` when the behaviour is testable offline.
+4. Update the README's "Known differences" and the open questions in `docs/research/`.
+5. Note the date of the check in `docs/research/README.md` (create it if missing), so the
+   next check knows what is already covered.
+
+Licences matter when reading community code:
+- msfa (Apache-2.0) and MIT, WTFPL, Unlicense or CC0 code can be reused, with notice.
+- Dexed, Virtual-FM-1, melodee and fm1-workbench are GPL. Take facts and measurements from them,
+  never code, so MF-1 stays MIT.
+- Never commit M-VAVE firmware images.
+
+## Layout
+
+- `Sources/MF1Core` (C++17 and Objective-C++):
+  - `dsp/`: msfa-derived operators, envelopes and LFO (Apache-2.0 headers stay).
+  - `synth.*`: the audio-thread synth (voices, mono and glide, ENV, arp, sequencer, clock,
+    output stage).
+  - `fx.*`: the effect chain.
+  - `engine.cc`: the model, persistence, MIDI and SysEx handling, and the C API in
+    `include/MF1Core.h`.
+  - `platform_*`: CoreAudio and CoreMIDI.
+- `Sources/MF1` (SwiftUI and AppKit): the panel, laid out in millimetres from a top-down photo;
+  the 240x240 screen (`ScreenView`, with `ScreenLayout` shared by drawing and clicks); the device
+  state machine (`DeviceModel`); the app, window and menus.
+- `Sources/mf1-render`: headless checks, benchmark and WAV rendering through the offline C API.
+- `docs/research/`: the specs the emulation is built from.
+
+## Build and test
+
+```sh
+scripts/build-app.sh                                          # build/MF-1.app
+swift build -c release
+.build/release/mf1-render Sources/MF1/Resources/Banks test    # must pass before committing
+.build/release/mf1-render Sources/MF1/Resources/Banks bench   # CPU must not regress
+MF1_LATENCY_LOG=1 build/MF-1.app/Contents/MacOS/MF-1          # per key latency breakdown
+build/MF-1.app/Contents/MacOS/MF-1 --snapshot out.png fx      # offscreen panel render
+```
+
+When testing the running app, mute MASTER first, so test notes don't play aloud on the user's
+speakers or headphones.
+
+## Conventions
+
+- Commit titles: `MF1Core: ...` for the engine, `MF1: ...` for the app. Write a prose body.
+- Match the surrounding style. Comments only for a non-obvious why, in plain English, without
+  naming identifiers.
+- The audio thread may not lock, allocate, log or call into Swift. Send changes through the
+  command queue.
+- "FM-1" and "M-VAVE" may appear only to describe compatibility. The app is MF-1. The identity
+  string "FM-1_015" in vendor replies and the "FM-1" in the MIDI port name are there so
+  existing tools recognise the port.
