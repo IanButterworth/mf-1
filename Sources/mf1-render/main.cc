@@ -246,6 +246,252 @@ static int test() {
     check(ok, "sequencer plays recorded steps and the chord in order");
   }
 
+  // Arp notes keep the velocity of the key they come from.
+  {
+    drainOut();
+    mf1_arp_enable(true);
+    uint8_t a[] = {0x90, 60, 30}, b[] = {0x90, 64, 110};
+    mf1_inject_midi(a, 3);
+    mf1_inject_midi(b, 3);
+    render((int)(kRate * 0.5));
+    bool ok = true;
+    int count = 0;
+    for (auto m = takeOut(); !m.empty(); m = takeOut())
+      if (m[0] == 0x90) {
+        count++;
+        // Incoming velocity is scaled by 100/127, as on the stock V15.
+        ok = ok && m[2] == (m[1] == 60 ? 30 : 110) * 100 / 127;
+      }
+    uint8_t c[] = {0x80, 60, 0}, d[] = {0x80, 64, 0};
+    mf1_inject_midi(c, 3);
+    mf1_inject_midi(d, 3);
+    mf1_arp_enable(false);
+    check(ok && count >= 3, "arp notes keep their own key velocity");
+  }
+
+  // Arp gate is measured from when each step was due, not from the block it fired in.
+  {
+    mf1_all_notes_off();
+    render(4800);
+    drainOut();
+    mf1_arp_enable(true);
+    uint8_t on60[] = {0x90, 60, 100}, off60[] = {0x80, 60, 0};
+    mf1_inject_midi(on60, 3);
+    int t0 = -1;
+    int k = 0;
+    bool ok = true;
+    int offs = 0;
+    for (int t = 0; t < (int)kRate; t += 64) {
+      render(64);
+      for (auto m = takeOut(); !m.empty(); m = takeOut()) {
+        if (m[0] == 0x90 && t0 < 0) t0 = t;
+        if (m[0] == 0x80 && t0 >= 0) {
+          // 1/16 at 120 BPM is 6000 samples; gate 50 releases 3000 after the due time.
+          int late = t - (t0 + 6000 * k++);
+          ok = ok && late >= 3000 - 64 && late < 3000;
+          offs++;
+        }
+      }
+    }
+    mf1_inject_midi(off60, 3);
+    mf1_arp_enable(false);
+    check(ok && offs >= 7, "arp gate counts from the due time of each step");
+  }
+
+  // Mono: a long note overtaken by legato notes and chords still ends on time.
+  {
+    mf1_all_notes_off();
+    drainOut();
+    mf1_seq_enable(true);
+    mf1_seq_set(MF1_S_PATTERN, 4);
+    mf1_seq_clear_pattern();
+    mf1_seq_set(MF1_S_VOICE, 1);
+    mf1_seq_set(MF1_S_STEPS, 4);
+    mf1_current_preset();
+    mf1_edit_set_mono(true);
+    mf1_seq_record(true);
+    mf1_key_down(60);
+    mf1_seq_select(2);
+    mf1_key_up(60);
+    mf1_seq_select(-2);
+    mf1_key_down(64);
+    mf1_key_up(64);
+    mf1_key_down(65);
+    mf1_key_down(69);
+    mf1_key_up(65);
+    mf1_key_up(69);
+    mf1_seq_record(false);
+    render(4800);
+    drainOut();
+    mf1_seq_play();
+    // Halfway through the rest on step 4, every note has ended.
+    render(6000 * 3 + 3000);
+    uint64_t lo, hi;
+    mf1_sounding(&lo, &hi);
+    bool quiet = lo == 0 && hi == 0;
+    render(6000 * 2);
+    mf1_seq_stop();
+    render(4800);
+    mf1_sounding(&lo, &hi);
+    quiet = quiet && lo == 0 && hi == 0;
+    mf1_edit_set_mono(false);
+    mf1_seq_enable(false);
+    check(quiet, "mono long notes end on time and Stop leaves nothing sounding");
+  }
+
+  // A long note lasts the sum of the rates of the steps it covers.
+  {
+    mf1_all_notes_off();
+    drainOut();
+    mf1_seq_enable(true);
+    mf1_seq_set(MF1_S_PATTERN, 5);
+    mf1_seq_clear_pattern();
+    mf1_seq_set(MF1_S_VOICE, 1);
+    mf1_seq_set(MF1_S_STEPS, 4);
+    mf1_seq_set(MF1_S_RATE, 2);
+    mf1_seq_record(true);
+    mf1_seq_set(MF1_S_RATE, 6);
+    mf1_key_down(60);
+    mf1_seq_select(1);
+    mf1_key_up(60);
+    mf1_seq_record(false);
+    render(4800);
+    drainOut();
+    mf1_seq_play();
+    int on = -1, off = -1;
+    for (int t = 0; t < 30000 && off < 0; t += 64) {
+      render(64);
+      for (auto m = takeOut(); !m.empty(); m = takeOut()) {
+        if (m[0] == 0x90 && on < 0) on = t;
+        if (m[0] == 0x80 && on >= 0 && off < 0) off = t;
+      }
+    }
+    mf1_seq_stop();
+    mf1_seq_enable(false);
+    // A 1/16 step then half of a 1/4 step: 6000 + 12000 samples.
+    printf("     long note over 1/16 and 1/4 lasted %d samples\n", off - on);
+    check(off - on >= 18000 - 64 && off - on < 18000,"long note sums the rates of the steps it covers");
+  }
+
+  // Play and MIDI Start load the voice bound to the pattern; a chain loads the
+  // next voice only when its first step is due.
+  {
+    mf1_all_notes_off();
+    mf1_seq_enable(true);
+    mf1_seq_set(MF1_S_PATTERN, 7);
+    mf1_seq_clear_pattern();
+    mf1_seq_set(MF1_S_VOICE, 11);
+    mf1_seq_set(MF1_S_STEPS, 1);
+    mf1_seq_record(true);
+    mf1_key_down(60);
+    mf1_key_up(60);
+    mf1_seq_record(false);
+    mf1_seq_set(MF1_S_PATTERN, 8);
+    mf1_seq_clear_pattern();
+    mf1_seq_set(MF1_S_VOICE, 12);
+    mf1_seq_set(MF1_S_STEPS, 1);
+    mf1_seq_record(true);
+    mf1_key_down(62);
+    mf1_key_up(62);
+    mf1_seq_record(false);
+    mf1_seq_set(MF1_S_PATTERN, 7);
+    mf1_seq_set(MF1_S_CHAIN, 2);
+    mf1_load_preset(3);
+    render(256);
+    mf1_seq_play();
+    render(3008);
+    bool ok = mf1_current_preset() == 11;
+    render(6000);
+    bool chained = mf1_current_preset() == 12;
+    mf1_seq_stop();
+    mf1_seq_set(MF1_S_CHAIN, 1);
+    mf1_seq_set(MF1_S_SYNC, 1);
+    mf1_load_preset(3);
+    render(256);
+    const uint8_t start[] = {0xFA}, stop[] = {0xFC};
+    mf1_inject_midi(start, 1);
+    render(256);
+    bool synced = mf1_current_preset() == 11;
+    mf1_inject_midi(stop, 1);
+    render(256);
+    mf1_seq_set(MF1_S_SYNC, 0);
+    mf1_seq_enable(false);
+    render(256);
+    check(ok, "Play loads the voice bound to the pattern");
+    check(chained, "a chain switches voice when the next pattern starts");
+    check(synced, "MIDI Start loads the voice bound to the pattern");
+  }
+
+  // MIDI clock: each step lasts its own rate in ticks, swing splits pairs of
+  // steps, and gates follow the clock rather than the internal tempo.
+  {
+    mf1_all_notes_off();
+    drainOut();
+    mf1_global_set(MF1_G_TEMPO, 60);
+    mf1_seq_enable(true);
+    mf1_seq_set(MF1_S_PATTERN, 9);
+    mf1_seq_clear_pattern();
+    mf1_seq_set(MF1_S_VOICE, 1);
+    mf1_seq_set(MF1_S_STEPS, 2);
+    mf1_seq_set(MF1_S_SYNC, 1);
+    mf1_seq_record(true);
+    mf1_seq_set(MF1_S_RATE, 4);
+    mf1_key_down(60);
+    mf1_key_up(60);
+    mf1_seq_set(MF1_S_RATE, 6);
+    mf1_key_down(62);
+    mf1_key_up(62);
+    mf1_seq_record(false);
+    const uint8_t start[] = {0xFA}, tick[] = {0xF8}, stop[] = {0xFC};
+    auto run = [&](std::vector<int>& ons, int& gate) {
+      gate = -1;
+      int on60 = -1;
+      // Prime the tick timing, then start.
+      for (int i = 0; i < 8; i++) {
+        mf1_inject_midi(tick, 1);
+        render(1024);
+      }
+      drainOut();
+      mf1_inject_midi(start, 1);
+      for (int i = 0; i < 40; i++) {
+        mf1_inject_midi(tick, 1);
+        for (int b = 0; b < 16; b++) {
+          render(64);
+          for (auto m = takeOut(); !m.empty(); m = takeOut()) {
+            if (m[0] == 0x90 && b == 0) ons.push_back(i);
+            if (m[0] == 0x90 && m[1] == 60 && on60 < 0) on60 = i * 1024 + b * 64;
+            if (m[0] == 0x80 && m[1] == 60 && on60 >= 0 && gate < 0) gate = i * 1024 + b * 64 - on60;
+          }
+        }
+      }
+      mf1_inject_midi(stop, 1);
+      render(4800);
+    };
+    std::vector<int> ons;
+    int gate;
+    run(ons, gate);
+    printf("     clocked steps at ticks:");
+    for (int t : ons) printf(" %d", t);
+    printf(", 1/8 gate %d samples\n", gate);
+    check(ons.size() >= 5 && ons[0] == 0 && ons[1] == 12 && ons[2] == 18 && ons[3] == 30 && ons[4] == 36,
+          "MIDI clock gives each step its own rate");
+    // 12 ticks of 1024 samples at gate 50, less the release margin.
+    check(gate >= 6144 - 64 && gate < 6144, "clocked gate follows the measured tick rate");
+    mf1_seq_set(MF1_S_RATE, 6);
+    mf1_seq_set(MF1_S_SWING, 75);
+    ons.clear();
+    run(ons, gate);
+    printf("     swung clocked steps at ticks:");
+    for (int t : ons) printf(" %d", t);
+    printf("\n");
+    check(ons.size() >= 5 && ons[0] == 0 && ons[1] == 9 && ons[2] == 12 && ons[3] == 21 && ons[4] == 24,
+          "swing applies under MIDI clock");
+    mf1_seq_set(MF1_S_SWING, 50);
+    mf1_seq_set(MF1_S_SYNC, 0);
+    mf1_seq_enable(false);
+    mf1_global_set(MF1_G_TEMPO, 120);
+  }
+
   char name[11];
   mf1_preset_name(0, name);
   printf("     preset 001 is '%s'\n", name);
