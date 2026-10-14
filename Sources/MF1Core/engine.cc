@@ -374,8 +374,8 @@ struct Engine {
     return Load::Loaded;
   }
 
-  // Moves an unreadable state file aside so nothing overwrites it, and
-  // counts it as having had banks so factory banks are not imported.
+  // Moves an unreadable state file aside so nothing overwrites it. The
+  // factory banks then load as on a first launch, since the copy is safe.
   void keepUnreadableState() {
     char stamp[32];
     time_t now = time(nullptr);
@@ -384,7 +384,7 @@ struct Engine {
     for (int i = 1; access(aside.c_str(), F_OK) == 0; i++)
       aside = statePath() + ".unreadable-" + stamp + "-" + std::to_string(i);
     saveBlocked = rename(statePath().c_str(), aside.c_str()) != 0;
-    haveFactory = true;
+    haveFactory = false;
     setMessage(saveBlocked ? "State unreadable: not saving" : "State unreadable: kept a copy");
   }
 

@@ -18,10 +18,10 @@ void mf1_output_info(int index, char name[256], char uid[256]);
 // Moves audio to another device; an empty UID follows the system default.
 void mf1_set_output(const char* uid);
 void mf1_stop(void);
-// True on a fresh state, before any factory banks were imported. False
+// True on a fresh state, before any factory banks were imported. Also true
 // when a saved state existed but could not be read: that file is renamed
-// to state.bin.unreadable-<time> and kept, the banks start empty, and a
-// message says so. Saving is then disabled if the file could not be moved.
+// to state.bin.unreadable-<time> and kept, the factory banks load, and a
+// message says so. Saving is disabled if the file could not be moved.
 bool mf1_needs_factory(void);
 // Loads a 4104 byte DX7 bank into bank 0..3 and records it as the
 // "last imported" bank used by Reset Patches.

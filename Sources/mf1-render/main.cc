@@ -12,6 +12,8 @@
 
 #include "MF1Core.h"
 
+int engineTests();
+
 static const double kRate = 48000;
 static int failures = 0;
 
@@ -594,7 +596,11 @@ int main(int argc, char** argv) {
   mf1_offline_init(kRate);
   loadFactory(argv[1]);
   std::string mode = argv[2];
-  if (mode == "test") return test() ? 1 : 0;
+  if (mode == "test") {
+    int failed = test();
+    failed += engineTests();
+    return failed ? 1 : 0;
+  }
   if (mode == "bench") bench();
   if (mode == "wav" && argc >= 5) wav(atoi(argv[3]) - 1, argv[4], argc > 5 ? atoi(argv[5]) : 60);
   return 0;

@@ -197,11 +197,11 @@ void stateTests() {
   chmod(dir.c_str(), 0755);
   check(readFile(path) == saved && listDir(dir).size() == 1, "failed save keeps the previous state.bin");
 
-  // A truncated file is kept aside and does not ask for factory banks.
+  // A truncated file is kept aside, and the factory banks load in its place.
   std::vector<uint8_t> cut(saved.begin(), saved.begin() + saved.size() / 2);
   writeFile(path, cut.data(), cut.size());
   check(!mf1_offline_open_state(dir.c_str()), "truncated state does not load");
-  check(!mf1_needs_factory(), "truncated state does not trigger a factory import");
+  check(mf1_needs_factory(), "truncated state asks for the factory banks once kept aside");
   std::string aside;
   for (auto& n : listDir(dir))
     if (n.rfind("state.bin.unreadable-", 0) == 0) aside = n;
