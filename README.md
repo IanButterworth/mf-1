@@ -62,7 +62,9 @@ current voice from the File menu.
 
 Drag knobs up or down, or use the scroll wheel (Option for fine steps). Play the keys with the
 mouse or the Mac keyboard (A W S E D R F G Y H U J K O L P ; [ ' from F3, Z/X for OCT−/OCT+).
-Hold SAVE to save, as on the hardware. Help › MF-1 Keyboard and Controls lists the rest.
+Hold SAVE to save, as on the hardware. The window is frameless by default: drag any bare part of
+the case to move it, and use ⌘W or ⌘Q to close. View › Frameless Window (⌃⌘F) switches to a
+normal window. Help › MF-1 Keyboard and Controls lists the rest.
 
 ## Known differences
 

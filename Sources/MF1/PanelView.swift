@@ -7,6 +7,7 @@ struct PanelView: View {
     @ObservedObject var model: DeviceModel
     var finish: Finish
     @State private var knobAngles = [Double](repeating: 0, count: 7)
+    @AppStorage("frameless") private var frameless = true
     @State private var keysDown: Set<Int> = []
     @State private var dragKey: Int? = nil
 
@@ -44,14 +45,21 @@ struct PanelView: View {
 
     private func caseShape(_ s: CGFloat) -> some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 9 * s)
-                .fill(Color.black.opacity(0.5))
-                .offset(y: 1.2 * s)
-                .blur(radius: 1.5 * s)
+            // Frameless windows get the system shadow around the case shape;
+            // a painted one would be cut off by the window edge as a dark line.
+            if !frameless {
+                RoundedRectangle(cornerRadius: 9 * s)
+                    .fill(Color.black.opacity(0.5))
+                    .offset(y: 1.2 * s)
+                    .blur(radius: 1.5 * s)
+            }
             RoundedRectangle(cornerRadius: 9 * s)
                 .fill(LinearGradient(colors: [finish.caseTop, finish.caseBottom], startPoint: .top, endPoint: .bottom))
+            if !Snapshot.active {
+                WindowDragArea().clipShape(RoundedRectangle(cornerRadius: 9 * s))
+            }
             RoundedRectangle(cornerRadius: 9 * s)
-                .stroke(LinearGradient(colors: [.white.opacity(0.18), .black.opacity(0.4)], startPoint: .top, endPoint: .bottom),
+                .stroke(LinearGradient(colors: [.white.opacity(0.18), .black.opacity(0.2)], startPoint: .top, endPoint: .bottom),
                         lineWidth: 0.5 * s)
             // Faint grain, so large flat areas do not look like plastic film.
             Canvas { ctx, size in

@@ -6,9 +6,12 @@ import UniformTypeIdentifiers
 @main
 struct MF1App: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
-    @StateObject private var model = DeviceModel()
+    // Not observed here: the model publishes on every LED tick, and observing
+    // it in the App would rebuild the menus 60 times a second.
+    private let model = DeviceModel.shared
     @AppStorage("finish") private var finishName = "Black"
     @AppStorage("quirks") private var quirks = true
+    @AppStorage("frameless") private var frameless = true
 
     // Fonts must be registered before the first view is drawn, or SwiftUI
     // keeps the fallback font for views it does not redraw.
@@ -16,14 +19,14 @@ struct MF1App: App {
         Engine.registerFonts()
     }
 
+    // The panel lives in a window the app delegate makes itself, because a
+    // SwiftUI Window scene cannot be borderless and still take key focus.
+    // This scene only carries the menus: a menu bar extra that is never
+    // inserted, since SwiftUI opens a Settings or Window scene by itself.
     var body: some Scene {
-        Window("MF-1", id: "main") {
-            ContentView(model: model, finish: Finish.all.first { $0.name == finishName } ?? .black)
-                .onAppear { delegate.model = model }
-        }
-        .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 1180, height: 1180 * PanelView.height / PanelView.width + 40)
+        MenuBarExtra("MF-1", isInserted: .constant(false)) { EmptyView() }
         .commands {
+            CommandGroup(replacing: .appSettings) {}
             CommandGroup(replacing: .newItem) {
                 Button("Import SysEx…") { Engine.openImportPanel() }.keyboardShortcut("o")
                 Menu("Export Bank") {
@@ -34,6 +37,11 @@ struct MF1App: App {
                 Button("Export Current Voice…") { Engine.exportVoice() }.keyboardShortcut("e")
                 Divider()
                 Button("Save (hold SAVE)") { model.save() }.keyboardShortcut("s")
+            }
+            CommandGroup(after: .toolbar) {
+                Toggle("Frameless Window", isOn: $frameless)
+                    .keyboardShortcut("f", modifiers: [.command, .control])
+                    .onChange(of: frameless) { _, v in delegate.setFrameless(v) }
             }
             CommandMenu("Device") {
                 Picker("Finish", selection: $finishName) {
@@ -61,18 +69,23 @@ struct MF1App: App {
 
 struct ContentView: View {
     @ObservedObject var model: DeviceModel
-    var finish: Finish
+    @AppStorage("finish") private var finishName = "Black"
+    @AppStorage("frameless") private var frameless = true
     @State private var dropTarget = false
+
+    private var finish: Finish { Finish.all.first { $0.name == finishName } ?? .black }
 
     var body: some View {
         ZStack {
-            Color(hex: 0x151517).ignoresSafeArea()
+            if !frameless { Color(hex: 0x151517).ignoresSafeArea() }
             PanelView(model: model, finish: finish)
-                .padding(EdgeInsets(top: 30, leading: 22, bottom: 22, trailing: 22))
+                .padding(frameless ? EdgeInsets(top: 1, leading: 1, bottom: 1, trailing: 1)
+                                   : EdgeInsets(top: 30, leading: 22, bottom: 22, trailing: 22))
             if dropTarget {
                 RoundedRectangle(cornerRadius: 16).stroke(Color.accentColor, lineWidth: 4).padding(8)
             }
         }
+        .ignoresSafeArea()
         .onDrop(of: [.fileURL], isTargeted: $dropTarget) { providers in
             for p in providers {
                 _ = p.loadObject(ofClass: URL.self) { url, _ in
@@ -98,8 +111,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var monitor: Any?
     private var computerKeys: [UInt16: Int] = [:]
 
+    private var window: PanelWindow?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         Engine.start()
+        let w = PanelWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 1180 * PanelView.height / PanelView.width),
+                            styleMask: [.borderless], backing: .buffered, defer: false)
+        w.contentView = NSHostingView(rootView: ContentView(model: DeviceModel.shared))
+        w.title = "MF-1"
+        w.isMovableByWindowBackground = true
+        w.contentAspectRatio = NSSize(width: PanelView.width, height: PanelView.height)
+        w.isReleasedWhenClosed = false
+        window = w
+        setFrameless(UserDefaults.standard.object(forKey: "frameless") as? Bool ?? true)
+        if !w.setFrameUsingName("MF1Panel") { w.center() }
+        w.setFrameAutosaveName("MF1Panel")
+        w.makeKeyAndOrderFront(nil)
+        model = DeviceModel.shared
         let quirks = UserDefaults.standard.object(forKey: "quirks") as? Bool ?? true
         mf1_global_set(Int32(MF1_G_QUIRKS), quirks ? 1 : 0)
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] e in
@@ -122,6 +150,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         default: break
         }
         return .terminateNow
+    }
+
+    // Frameless: no title bar, border or buttons, and a clear background, so
+    // only the case is drawn and macOS shadows its rounded shape.
+    func setFrameless(_ frameless: Bool) {
+        guard let w = window else { return }
+        let frame = w.frame
+        w.styleMask = frameless ? [.borderless, .miniaturizable, .resizable]
+                                : [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        if !frameless {
+            w.titlebarAppearsTransparent = true
+            w.titleVisibility = .hidden
+        }
+        w.isOpaque = !frameless
+        w.backgroundColor = frameless ? .clear : NSColor(red: 0.08, green: 0.08, blue: 0.09, alpha: 1)
+        w.hasShadow = true
+        w.setFrame(frame, display: true)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { w.invalidateShadow() }
+    }
+
+    // Returning false stops SwiftUI from also opening its placeholder
+    // Settings window when the Dock icon is clicked.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        window?.makeKeyAndOrderFront(nil)
+        return false
     }
 
     // Key-ups are not delivered once another app is active.
@@ -251,4 +304,23 @@ enum Snapshot {
         }
         exit(0)
     }
+}
+
+// A window that can be borderless and still take keyboard focus.
+final class PanelWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+    // Borderless windows have no close button, so Command-W closes directly.
+    override func performClose(_ sender: Any?) { close() }
+}
+
+// Bare case surface: a drag here moves the window.
+struct WindowDragArea: NSViewRepresentable {
+    final class DragView: NSView {
+        override var mouseDownCanMoveWindow: Bool { true }
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
+    }
+    func makeNSView(context: Context) -> NSView { DragView() }
+    func updateNSView(_ view: NSView, context: Context) {}
 }

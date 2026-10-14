@@ -41,6 +41,8 @@ enum Popup: Equatable {
 }
 
 final class DeviceModel: ObservableObject {
+    static let shared = DeviceModel()
+
     @Published var mode: Mode = .home
     @Published var pages: [Mode: Int] = [:]
     @Published var editTarget: EditTarget = .op1
