@@ -12,7 +12,6 @@ struct MF1App: App {
     @AppStorage("finish") private var finishName = "Black"
     @AppStorage("quirks") private var quirks = true
     @AppStorage("frameless") private var frameless = true
-    @AppStorage("outputUID") private var outputUID = ""
 
     // Fonts must be registered before the first view is drawn, or SwiftUI
     // keeps the fallback font for views it does not redraw.
@@ -51,13 +50,7 @@ struct MF1App: App {
                 PatchMenu(model: model)
             }
             CommandMenu("Device") {
-                // Bluetooth outputs add over 100 ms of delay; wired, USB or
-                // built-in outputs keep key-to-sound time to a few ms.
-                Picker("Audio Output", selection: $outputUID) {
-                    Text("System Default").tag("")
-                    ForEach(Engine.outputs(), id: \.uid) { Text($0.name).tag($0.uid) }
-                }
-                .onChange(of: outputUID) { _, v in mf1_set_output(v) }
+                OutputMenu()
                 Toggle("FM-1 V15 Hardware Behaviour", isOn: $quirks)
                     .onChange(of: quirks) { _, v in mf1_global_set(Int32(MF1_G_QUIRKS), v ? 1 : 0) }
                 Divider()
@@ -121,6 +114,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var timer: Timer?
     private var monitor: Any?
     private var computerKeys: [UInt16: Int] = [:]
+    private var octKeys: [UInt16: Int] = [:]
+    // Keys the keyboard state has reported down at least once. Only these are
+    // released by polling, so a state read that never works cannot cut notes.
+    private var seenDown: Set<UInt16> = []
 
     private var window: PanelWindow?
 
@@ -191,7 +188,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Key-ups are not delivered once another app is active.
     func applicationDidResignActive(_ notification: Notification) {
         computerKeys.removeAll()
+        octKeys.removeAll()
+        seenDown.removeAll()
         model?.releaseAllKeys()
+        model?.releaseOct()
+        KnobInputView.showCursor()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -203,27 +204,53 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func startTimer() {
         guard timer == nil else { return }
         timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
+            self?.releaseLiftedKeys()
             self?.model?.poll()
         }
         RunLoop.main.add(timer!, forMode: .common)
     }
 
     // Mac keyboard as the keybed: A W S E D R F G Y H U J K O L P ; [ ' play
-    // chromatically from F, Z and X are OCT- and OCT+.
-    static let noteKeys: [Character: Int] = [
-        "a": 0, "w": 1, "s": 2, "e": 3, "d": 4, "r": 5, "f": 6, "g": 7, "y": 8, "h": 9, "u": 10, "j": 11,
-        "k": 12, "o": 13, "l": 14, "p": 15, ";": 16, "[": 17, "'": 18,
+    // chromatically from F, Z and X are OCT- and OCT+. Keys are matched by
+    // position, so Shift and other layouts still play.
+    static let noteKeys: [UInt16: Int] = [
+        0: 0, 13: 1, 1: 2, 14: 3, 2: 4, 15: 5, 3: 6, 5: 7, 16: 8, 4: 9, 32: 10, 38: 11,
+        40: 12, 31: 13, 37: 14, 35: 15, 41: 16, 33: 17, 39: 18,
     ]
+    static let octaveKeys: [UInt16: Int] = [6: -1, 7: 1]
+
+    @discardableResult
+    private func release(_ code: UInt16) -> Bool {
+        seenDown.remove(code)
+        if let k = computerKeys.removeValue(forKey: code) {
+            model?.keyUp(k)
+            return true
+        }
+        if let dir = octKeys.removeValue(forKey: code) {
+            model?.octUp(dir)
+            return true
+        }
+        return false
+    }
+
+    // Key-ups taken by a window drag or a menu never reach the app, so held
+    // keys are checked against the keyboard itself each frame.
+    private func releaseLiftedKeys() {
+        for code in Array(computerKeys.keys) + Array(octKeys.keys) {
+            if CGEventSource.keyState(.combinedSessionState, key: code) {
+                seenDown.insert(code)
+            } else if seenDown.contains(code) {
+                release(code)
+            }
+        }
+    }
 
     private func handle(_ e: NSEvent) -> Bool {
         guard let model else { return false }
         let down = e.type == .keyDown
         // Key-ups always go through, so a key released with Command held
         // does not leave a note stuck.
-        if !down, let k = computerKeys.removeValue(forKey: e.keyCode) {
-            model.keyUp(k)
-            return true
-        }
+        if !down && release(e.keyCode) { return true }
         if e.modifierFlags.contains(.command) { return false }
         if NSApp.keyWindow?.firstResponder is NSTextView { return false }
         if model.renaming != nil, down, let c = e.characters?.first {
@@ -233,19 +260,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 model.turnSelect(1)
             } else if e.keyCode == 53 {
                 model.turnKnob(1, -1)
-            } else if c.isASCII, !c.isNewline {
+            } else if DeviceModel.renameSets.contains(where: { $0.contains(c) }) {
                 model.typeRename(c)
             }
             return true
         }
-        guard let ch = e.charactersIgnoringModifiers?.lowercased().first else { return false }
-        if ch == "z" || ch == "x" {
-            if e.isARepeat { return true }
-            let dir = ch == "z" ? -1 : 1
-            if down { model.octDown(dir) } else { model.octUp(dir) }
+        if let dir = Self.octaveKeys[e.keyCode] {
+            if down && !e.isARepeat && octKeys[e.keyCode] == nil {
+                octKeys[e.keyCode] = dir
+                model.octDown(dir)
+            }
             return true
         }
-        guard let semi = Self.noteKeys[ch] else { return false }
+        guard let semi = Self.noteKeys[e.keyCode] else { return false }
         if e.isARepeat { return true }
         // Semitone above F3 to the panel key that plays it.
         let k: Int
@@ -340,6 +367,21 @@ struct WindowDragArea: NSViewRepresentable {
     }
     func makeNSView(context: Context) -> NSView { DragView() }
     func updateNSView(_ view: NSView, context: Context) {}
+}
+
+// Bluetooth outputs add over 100 ms of delay; wired, USB or built-in
+// outputs keep key-to-sound time to a few ms.
+struct OutputMenu: View {
+    @ObservedObject private var outputs = AudioOutputs.shared
+    @AppStorage("outputUID") private var outputUID = ""
+
+    var body: some View {
+        Picker("Audio Output", selection: $outputUID) {
+            Text("System Default").tag("")
+            ForEach(outputs.devices, id: \.uid) { Text($0.name).tag($0.uid) }
+        }
+        .onChange(of: outputUID) { _, v in mf1_set_output(v) }
+    }
 }
 
 struct PatchMenu: View {

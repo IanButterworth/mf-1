@@ -44,7 +44,9 @@ enum Popup: Equatable {
 final class DeviceModel: ObservableObject {
     static let shared = DeviceModel()
 
-    @Published var mode: Mode = .home
+    @Published var mode: Mode = .home {
+        didSet { if mode != oldValue { fxGrabbed = false } }
+    }
     @Published var pages: [Mode: Int] = [:]
     @Published var editTarget: EditTarget = .op1
     @Published var editPages: [EditTarget: Int] = [:]
@@ -69,16 +71,20 @@ final class DeviceModel: ObservableObject {
     private var lastGeneration: UInt32 = 0
     private var lastLedSignature = 0
     private var scopeWasLive = false
+    private var lastScreenStep = -1
+    private var lastVolume: Int32 = -1
+    private var masterLevel: Double?
+    private var fxClickOnSelected = false
+    // Engine state behind the LEDs, read once per frame.
+    private(set) var led = LedState()
 
     private static let ledButtons = ["FX", "ENV", "LFO", "EDIT", "GLO", "HOME", "SEL", "SAVE", "ARP", "SEQ",
                                      "PLAY", "REC", "OCT-", "OCT+"]
 
     private func ledSignature() -> Int {
         var h = Hasher()
-        for b in Self.ledButtons { h.combine(buttonLit(b).map { "\($0)" }) }
-        var lo: UInt64 = 0, hi: UInt64 = 0
-        mf1_sounding(&lo, &hi)
-        for k in 0..<27 { h.combine(keyLed(k, sounding: (lo, hi))) }
+        for b in Self.ledButtons { h.combine(buttonLed(b)) }
+        for k in 0..<27 { h.combine(keyLed(k)) }
         return h.finalize()
     }
     private var transposeTouched = false
@@ -91,6 +97,7 @@ final class DeviceModel: ObservableObject {
     var transpose: Int { Int(mf1_global_get(Int32(MF1_G_TRANSPOSE))) }
     var arpOn: Bool { mf1_arp_on() }
     var seqOn: Bool { mf1_seq_on() }
+    var overlayOpen: Bool { renaming != nil || copying != nil || resetting }
 
     func page(_ m: Mode) -> Int { pages[m] ?? 0 }
 
@@ -436,8 +443,10 @@ final class DeviceModel: ObservableObject {
         }
     }
 
+    // PRESETS does nothing while rename, copy or reset is open, as loading a
+    // voice under them would change what they act on.
     func turnPresets(_ delta: Int) {
-        guard delta != 0, !seqOn else { return }
+        guard delta != 0, !seqOn, !overlayOpen else { return }
         mf1_load_preset(Int32(((preset + delta) % 128 + 128) % 128))
         show(.presets, for: 1.2)
         objectWillChange.send()
@@ -446,6 +455,8 @@ final class DeviceModel: ObservableObject {
     // Choosing a patch from the menu, like turning PRESETS straight to it.
     // PRESETS does nothing while SEQ is on, since each pattern binds a voice.
     func selectPreset(_ index: Int) {
+        // Reloading the current patch would throw away its unsaved edits.
+        guard index != preset, !overlayOpen else { return }
         guard !seqOn else {
             flash("Disable SEQ first")
             return
@@ -470,8 +481,15 @@ final class DeviceModel: ObservableObject {
         show(.algorithm, for: 1.2)
     }
 
-    func turnMaster(_ value: Int) {
-        mf1_global_set(Int32(MF1_G_VOLUME), Int32(value))
+    func turnMaster(by delta: Double) {
+        let cur = Int(mf1_global_get(Int32(MF1_G_VOLUME)))
+        // Keep the fraction between calls, so a slow drag still moves the volume.
+        var level = masterLevel ?? Double(cur)
+        if Int(level.rounded()) != cur { level = Double(cur) }
+        level = max(0, min(100, level + delta))
+        masterLevel = level
+        let value = Int(level.rounded())
+        if value != cur { mf1_global_set(Int32(MF1_G_VOLUME), Int32(value)) }
         show(.value("Volume", "\(value)"))
     }
 
@@ -544,7 +562,6 @@ final class DeviceModel: ObservableObject {
 
     private func toggle(_ m: Mode) {
         mode = mode == m ? .home : m
-        if m != .fx { fxGrabbed = false }
     }
 
     func save() {
@@ -575,6 +592,11 @@ final class DeviceModel: ObservableObject {
         if octHeld.isEmpty { transposeTouched = false }
     }
 
+    func releaseOct() {
+        octHeld.removeAll()
+        transposeTouched = false
+    }
+
     // ---------------------------------------------------------------- keys
 
     // Key index 0..26: lower row is 0..15, upper row 16..26.
@@ -588,18 +610,19 @@ final class DeviceModel: ObservableObject {
     func noteFor(key k: Int) -> Int { 53 + DeviceModel.semitone(forKey: k) + octave * 12 + transpose }
 
     func keyDown(_ k: Int) {
-        if mode == .edit && k >= 16 {
-            editKey(k - 16)
-            return
-        }
-        if let name = renaming, k >= 16, k - 16 < 5 {
-            if k - 16 == 4 {
+        if let name = renaming, k >= 16 {
+            switch k - 16 {
+            case 0...3: renameClass = k - 16
+            case 4:
                 var n = name
                 n[renameCursor] = " "
                 renaming = n
-            } else {
-                renameClass = k - 16
+            default: break
             }
+            return
+        }
+        if mode == .edit && k >= 16 {
+            editKey(k - 16)
             return
         }
         guard heldKeys[k] == nil else { return }
@@ -710,11 +733,13 @@ final class DeviceModel: ObservableObject {
         tick &+= 1
         // Redraw LEDs only when one changes, and the screen only while the
         // scope shows a signal or a blink flips, so most frames cost nothing.
-        PatchList.shared.refresh()
+        let g = mf1_generation()
+        PatchList.shared.refresh(generation: g)
         if DeviceModel.logLatency && tick % 60 == 0 {
             FileHandle.standardError.write("scope fps \(ScreenView.drawCount)\n".data(using: .utf8)!)
             ScreenView.drawCount = 0
         }
+        led = LedState.read()
         let sig = ledSignature()
         if sig != lastLedSignature {
             lastLedSignature = sig
@@ -722,88 +747,147 @@ final class DeviceModel: ObservableObject {
         }
         let scopeLive = mode == .home && popup == nil && mf1_peak() > 0.0002
         let fxBlink = mode == .fx && tick % 20 == 0
-        if scopeLive || scopeWasLive || fxBlink { LedClock.screen.frame = tick }
+        var redrawScreen = scopeLive || scopeWasLive || fxBlink
         scopeWasLive = scopeLive
-        let g = mf1_generation()
+        // The SEQ screen shows the step being recorded or played.
+        if mode == .seq && (led.seqRecording || led.seqPlaying) {
+            let step = led.seqPlaying ? led.playStep : led.recStep
+            if step != lastScreenStep {
+                lastScreenStep = step
+                redrawScreen = true
+            }
+        }
         if g != lastGeneration {
             lastGeneration = g
             var buf = [CChar](repeating: 0, count: 64)
             mf1_take_message(&buf)
             let msg = String(cString: buf)
             if !msg.isEmpty { flash(msg) }
-            objectWillChange.send()
+            // Most engine changes, such as an FX CC sweep, show only on the
+            // screen. Outside it, the panel draws only the volume.
+            redrawScreen = true
+            let v = mf1_global_get(Int32(MF1_G_VOLUME))
+            if v != lastVolume {
+                lastVolume = v
+                objectWillChange.send()
+            }
         }
+        if redrawScreen { LedClock.screen.frame = tick }
     }
 
     // ---------------------------------------------------------------- LEDs
 
-    func buttonLit(_ b: String) -> Color? {
+    enum ButtonLed: Hashable { case off, on, dim, green, orange, red }
+
+    func buttonLed(_ b: String) -> ButtonLed {
         let blink = (tick / 15) % 2 == 0
         switch b {
-        case "FX": return mode == .fx ? .white : nil
-        case "ENV": return mf1_env_get(0) != 0 ? .white : nil
-        case "LFO": return mode == .lfo ? .white : nil
-        case "EDIT": return mode == .edit ? .white : nil
-        case "GLO": return mode == .glo ? .white : nil
-        case "HOME": return mode == .home ? .white : nil
-        case "SEL": return fxGrabbed && mode == .fx ? .white : nil
-        case "SAVE": return saving ? .white : (mf1_dirty() && blink ? Color.white.opacity(0.35) : nil)
-        case "ARP": return arpOn ? .white : nil
-        case "SEQ": return seqOn ? .white : nil
+        case "FX": return mode == .fx ? .on : .off
+        case "ENV": return led.envOn ? .on : .off
+        case "LFO": return mode == .lfo ? .on : .off
+        case "EDIT": return mode == .edit ? .on : .off
+        case "GLO": return mode == .glo ? .on : .off
+        case "HOME": return mode == .home ? .on : .off
+        case "SEL": return fxGrabbed && mode == .fx ? .on : .off
+        case "SAVE": return saving ? .on : (led.dirty && blink ? .dim : .off)
+        case "ARP": return led.arpOn ? .on : .off
+        case "SEQ": return led.seqOn ? .on : .off
         case "PLAY":
-            guard seqOn else { return nil }
-            return mf1_seq_playing() ? Color(red: 0.3, green: 1, blue: 0.45) : Color(red: 1, green: 0.42, blue: 0.2)
-        case "REC": return mf1_seq_recording() ? Color(red: 1, green: 0.2, blue: 0.2) : nil
-        case "OCT-":
-            return octaveLed(-1)
-        case "OCT+":
-            return octaveLed(1)
-        default: return nil
+            guard led.seqOn else { return .off }
+            return led.seqPlaying ? .green : .orange
+        case "REC": return led.seqRecording ? .red : .off
+        case "OCT-": return octaveLed(-1)
+        case "OCT+": return octaveLed(1)
+        default: return .off
         }
     }
 
-    private func octaveLed(_ side: Int) -> Color? {
-        let o = octave
-        guard o != 0, (o > 0) == (side > 0) else { return nil }
+    func buttonLit(_ b: String) -> Color? {
+        switch buttonLed(b) {
+        case .off: return nil
+        case .on: return .white
+        case .dim: return Color.white.opacity(0.35)
+        case .green: return Color(red: 0.3, green: 1, blue: 0.45)
+        case .orange: return Color(red: 1, green: 0.42, blue: 0.2)
+        case .red: return Color(red: 1, green: 0.2, blue: 0.2)
+        }
+    }
+
+    private func octaveLed(_ side: Int) -> ButtonLed {
+        let o = led.octave
+        guard o != 0, (o > 0) == (side > 0) else { return .off }
         // 1 = slow blink, 2 = fast blink, 3 = solid.
         switch abs(o) {
-        case 1: return (tick / 30) % 2 == 0 ? .white : nil
-        case 2: return (tick / 8) % 2 == 0 ? .white : nil
-        default: return .white
+        case 1: return (tick / 30) % 2 == 0 ? .on : .off
+        case 2: return (tick / 8) % 2 == 0 ? .on : .off
+        default: return .on
         }
     }
 
+    // The note key k plays, as of the last frame.
+    func shownNote(key k: Int) -> Int { 53 + DeviceModel.semitone(forKey: k) + led.octave * 12 + led.transpose }
+
     // Brightness 0...1 for the LED in key k.
-    func keyLed(_ k: Int, sounding: (UInt64, UInt64)) -> Double {
+    func keyLed(_ k: Int) -> Double {
         let blinkOn = (tick / 15) % 2 == 0
         if mode == .edit && k >= 16 {
             let i = k - 16
             switch i {
             case 0...7:
                 let selected = editTarget.rawValue == i
-                if i < 6 && Int(mf1_op_mutes()) & (1 << i) != 0 { return selected ? 0.5 : 0.08 }
+                if i < 6 && led.opMutes & (1 << i) != 0 { return selected ? 0.5 : 0.08 }
                 return selected ? 1 : (blinkOn ? 0.8 : 0.1)
-            case 8: return mf1_edit_mono() ? 1 : (blinkOn ? 0.8 : 0.1)
-            case 9: return mf1_edit_mono() ? (blinkOn ? 0.8 : 0.1) : 1
+            case 8: return led.mono ? 1 : (blinkOn ? 0.8 : 0.1)
+            case 9: return led.mono ? (blinkOn ? 0.8 : 0.1) : 1
             default: return 0.05
             }
         }
-        if seqOn && k < 16 {
-            let mask = Int(mf1_seq_step_mask())
-            let steps = Int(mf1_seq_get(Int32(MF1_S_STEPS)))
-            if k >= steps { return 0.04 }
-            let playing = Int(mf1_seq_play_step())
-            if mf1_seq_playing() && playing == k { return blinkOn ? 1 : 0.3 }
-            if mf1_seq_recording() && !mf1_seq_playing() && Int(mf1_seq_rec_step()) == k {
+        if led.seqOn && k < 16 {
+            if k >= led.steps { return 0.04 }
+            if led.seqPlaying && led.playStep == k { return blinkOn ? 1 : 0.3 }
+            if led.seqRecording && !led.seqPlaying && led.recStep == k {
                 return (tick / 6) % 2 == 0 ? 1 : 0.25
             }
-            return mask & (1 << k) != 0 ? 0.9 : 0.12
+            return led.stepMask & (1 << k) != 0 ? 0.9 : 0.12
         }
-        let note = noteFor(key: k)
+        let note = shownNote(key: k)
         guard (0...127).contains(note) else { return 0.05 }
-        let lit = note < 64 ? (sounding.0 >> UInt64(note)) & 1 : (sounding.1 >> UInt64(note - 64)) & 1
+        let lit = note < 64 ? (led.soundingLo >> UInt64(note)) & 1 : (led.soundingHi >> UInt64(note - 64)) & 1
         if lit != 0 || heldKeys[k] != nil { return 1 }
         return 0.06
+    }
+}
+
+// What the LEDs show from the engine. Reading it once per frame keeps the
+// LED passes from taking the engine lock for every button and key.
+struct LedState {
+    var octave = 0, transpose = 0
+    var seqOn = false, seqPlaying = false, seqRecording = false
+    var playStep = 0, recStep = 0, stepMask = 0, steps = 16
+    var arpOn = false, envOn = false, dirty = false, mono = false
+    var opMutes = 0
+    var soundingLo: UInt64 = 0, soundingHi: UInt64 = 0
+
+    static func read() -> LedState {
+        var s = LedState()
+        s.octave = Int(mf1_global_get(Int32(MF1_G_OCTAVE)))
+        s.transpose = Int(mf1_global_get(Int32(MF1_G_TRANSPOSE)))
+        s.seqOn = mf1_seq_on()
+        if s.seqOn {
+            s.seqPlaying = mf1_seq_playing()
+            s.seqRecording = mf1_seq_recording()
+            s.playStep = Int(mf1_seq_play_step())
+            s.recStep = Int(mf1_seq_rec_step())
+            s.stepMask = Int(mf1_seq_step_mask())
+            s.steps = Int(mf1_seq_get(Int32(MF1_S_STEPS)))
+        }
+        s.arpOn = mf1_arp_on()
+        s.envOn = mf1_env_get(0) != 0
+        s.dirty = mf1_dirty()
+        s.mono = mf1_edit_mono()
+        s.opMutes = Int(mf1_op_mutes())
+        mf1_sounding(&s.soundingLo, &s.soundingHi)
+        return s
     }
 }
 
@@ -823,8 +907,7 @@ final class PatchList: ObservableObject {
     @Published private(set) var current = 0
     private var generation: UInt32 = .max
 
-    func refresh() {
-        let g = mf1_generation()
+    func refresh(generation g: UInt32) {
         let c = Int(mf1_current_preset())
         if g != generation || names.isEmpty {
             generation = g
@@ -881,7 +964,7 @@ extension DeviceModel {
         return .none
     }
 
-    func screenClick(_ t: ScreenTarget, back: Bool, double: Bool) {
+    func screenClick(_ t: ScreenTarget, back: Bool, clicks: Int) {
         let dir = back ? -1 : 1
         switch t {
         case .grid(let i):
@@ -904,14 +987,12 @@ extension DeviceModel {
             if fxGrabbed {
                 if i != fxSelected { mf1_fx_swap(Int32(fxSelected), Int32(i)) }
                 fxSelected = i
-            } else if i == fxSelected || double {
-                fxSelected = i
-                let effect = FxEffect(rawValue: Int(mf1_fx_order(Int32(i))))!
-                let on = mf1_fx_get(effect.ccs[3]) != 0
-                mf1_fx_set(effect.ccs[3], on ? 0 : 1)
-                showPill(effect.title, on ? "Off" : "On")
-            } else {
-                fxSelected = i
+            } else if clicks == 1 {
+                fxClickOnSelected = i == fxSelected
+                if fxClickOnSelected { toggleFx(i) } else { fxSelected = i }
+            } else if clicks == 2 && !fxClickOnSelected && i == fxSelected {
+                // The first click only selected the slot, so the second one switches it.
+                toggleFx(i)
             }
             objectWillChange.send()
         case .pill:
@@ -938,6 +1019,13 @@ extension DeviceModel {
         case .title, .copyBox, .none:
             break
         }
+    }
+
+    private func toggleFx(_ pos: Int) {
+        let effect = FxEffect(rawValue: Int(mf1_fx_order(Int32(pos))))!
+        let on = mf1_fx_get(effect.ccs[3]) != 0
+        mf1_fx_set(effect.ccs[3], on ? 0 : 1)
+        showPill(effect.title, on ? "Off" : "On")
     }
 
     // A drag or scroll over a target, in knob detents (up is positive).

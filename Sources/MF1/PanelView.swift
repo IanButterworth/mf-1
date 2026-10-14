@@ -74,17 +74,17 @@ struct PanelView: View {
         let d = 7.6 * s
         let positions: [(CGFloat, CGFloat)] = [(12.9, 14.4), (29.4, 14.4), (12.9, 31.3), (30.2, 31.3),
                                                (91.0, 14.4), (109.2, 14.4), (127.3, 14.4), (145.8, 14.4)]
+        let names = ["MASTER", "SELECT", "PRESETS", "ALGORITHM", "KNOB1", "KNOB2", "KNOB3", "KNOB4"]
         return ZStack(alignment: .topLeading) {
             // MASTER: a 300 degree pot.
             let vol = Double(mf1_global_get(Int32(MF1_G_VOLUME)))
-            KnobView(diameter: d, angle: (vol / 100 - 0.5) * (300.0 / 180.0) * .pi, pointer: true, onTurn: { _ in },
-                     onAbsolute: { dy in
-                         let v = max(0, min(100, Int((vol + Double(dy) * 0.5).rounded())))
-                         model.turnMaster(v)
-                     })
+            KnobView(name: names[0], value: "\(Int(vol))", diameter: d,
+                     angle: (vol / 100 - 0.5) * (300.0 / 180.0) * .pi, pointer: true,
+                     onTurn: { model.turnMaster(by: Double($0)) },
+                     onAbsolute: { model.turnMaster(by: Double($0) * 0.5) })
                 .position(at(positions[0].0, positions[0].1, s))
             ForEach(1..<8) { i in
-                KnobView(diameter: d, angle: knobAngles[i - 1], pointer: false, onTurn: { delta in
+                KnobView(name: names[i], diameter: d, angle: knobAngles[i - 1], pointer: false, onTurn: { delta in
                     knobAngles[i - 1] += Double(delta) * 0.26
                     switch i {
                     case 1: model.turnSelect(delta)
@@ -183,12 +183,6 @@ struct PanelView: View {
                       width: Self.upperKeySize.width, height: Self.upperKeySize.height)
     }
 
-    private static func sounding() -> (UInt64, UInt64) {
-        var lo: UInt64 = 0, hi: UInt64 = 0
-        mf1_sounding(&lo, &hi)
-        return (lo, hi)
-    }
-
     private func keyAt(_ p: CGPoint, _ s: CGFloat) -> Int? {
         let mm = CGPoint(x: p.x / s, y: p.y / s)
         for k in 0..<27 where keyRect(k).insetBy(dx: -0.5, dy: -0.5).contains(mm) { return k }
@@ -209,12 +203,19 @@ struct PanelView: View {
                 Circle().fill(Color.black.opacity(0.75)).frame(width: 0.7 * s).position(at(x, 72.4, s))
             }
             Ticking {
-                let sounding = Self.sounding()
                 ForEach(0..<27) { k in
                     let r = keyRect(k)
+                    let label = k >= 16 ? Self.upperLabels[k - 16] : nil
                     KeyCap(size: CGSize(width: r.width * s, height: r.height * s), finish: finish,
-                           led: model.keyLed(k, sounding: sounding), pressed: keysDown.contains(k) || model.isHeld(k),
-                           label: k >= 16 ? Self.upperLabels[k - 16] : nil, labelSize: 1.75 * s)
+                           led: model.keyLed(k), pressed: keysDown.contains(k) || model.isHeld(k),
+                           label: label, labelSize: 1.75 * s)
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel("key \(DeviceModel.noteName(model.shownNote(key: k)))\(label.map { " " + $0 } ?? "")")
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityAction {
+                            model.keyDown(k)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { model.keyUp(k) }
+                        }
                         .position(at(r.midX, r.midY, s))
                 }
             }
@@ -223,6 +224,7 @@ struct PanelView: View {
                 .contentShape(Rectangle())
                 .frame(width: 151.1 * s, height: 34.8 * s)
                 .position(at(80.75, 72.6, s))
+                .accessibilityHidden(true)
                 .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("panel"))
                     .onChanged { v in
                         let k = keyAt(v.location, s)
