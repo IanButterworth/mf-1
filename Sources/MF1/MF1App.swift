@@ -40,6 +40,9 @@ struct MF1App: App {
                 Button("Save (hold SAVE)") { model.save() }.keyboardShortcut("s")
             }
             CommandGroup(after: .toolbar) {
+                Picker("Finish", selection: $finishName) {
+                    ForEach(Finish.all, id: \.name) { Text($0.name).tag($0.name) }
+                }
                 Toggle("Frameless Window", isOn: $frameless)
                     .keyboardShortcut("f", modifiers: [.command, .control])
                     .onChange(of: frameless) { _, v in delegate.setFrameless(v) }
@@ -48,9 +51,6 @@ struct MF1App: App {
                 PatchMenu(model: model)
             }
             CommandMenu("Device") {
-                Picker("Finish", selection: $finishName) {
-                    ForEach(Finish.all, id: \.name) { Text($0.name).tag($0.name) }
-                }
                 // Bluetooth outputs add over 100 ms of delay; wired, USB or
                 // built-in outputs keep key-to-sound time to a few ms.
                 Picker("Audio Output", selection: $outputUID) {

@@ -98,9 +98,9 @@ struct ScreenView: View {
         let r = CGRect(x: 207, y: 9, width: 24, height: 13)
         ctx.stroke(Path(roundedRect: r, cornerRadius: 3), with: .color(color), lineWidth: 1.5)
         ctx.fill(Path(CGRect(x: 231.5, y: 13, width: 2, height: 5)), with: .color(color))
-        for i in 0..<2 {
-            ctx.fill(Path(CGRect(x: 210.5 + CGFloat(i) * 6, y: 11.5, width: 4, height: 8)), with: .color(color))
-        }
+        // Room for three bars; one is lit. An emulator's battery is always
+        // a third full, as a joke.
+        ctx.fill(Path(CGRect(x: 209.75, y: 11.5, width: 5, height: 8)), with: .color(color))
     }
 
     // ---------------------------------------------------------------- pages
