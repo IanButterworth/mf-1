@@ -6,23 +6,41 @@ struct Finish {
     var name: String
     var caseTop: Color
     var caseBottom: Color
+    // The keys and the bed around them are one piece of silicone.
     var keybed: Color
-    var key: Color
     var tray: Color
     var button: Color
     var legend: Color
     var unlitLegend: Color
+    // Printed panel labels and key labels, where they differ from the
+    // button legends (light cases print in a dark ink).
+    var label: Color? = nil
+    var keyLabel: Color? = nil
+    // Unlit LED slits on coloured keys read as dark grooves.
+    var slit: Color? = nil
 
     static let black = Finish(name: "Black", caseTop: Color(hex: 0x323234), caseBottom: Color(hex: 0x252527),
-                              keybed: Color(hex: 0x1c1c1e), key: Color(hex: 0x2d2d2f), tray: Color(hex: 0x29292b),
+                              keybed: Color(hex: 0x2b2b2d), tray: Color(hex: 0x29292b),
                               button: Color(hex: 0x1c1d1e), legend: Color(hex: 0xdadada), unlitLegend: Color(hex: 0x58606a))
     static let purple = Finish(name: "Purple", caseTop: Color(hex: 0xd2aee0), caseBottom: Color(hex: 0xa983c6),
-                               keybed: Color(hex: 0x695c9e), key: Color(hex: 0x6a5fab), tray: Color(hex: 0x7a6db0),
+                               keybed: Color(hex: 0x6a5fab), tray: Color(hex: 0x7a6db0),
                                button: Color(hex: 0x6f64a8), legend: Color(hex: 0xffffff), unlitLegend: Color(hex: 0xb8b0e0))
     static let orange = Finish(name: "Orange", caseTop: Color(hex: 0xe0703a), caseBottom: Color(hex: 0xbd5a2e),
-                               keybed: Color(hex: 0x8a3d24), key: Color(hex: 0x7d453b), tray: Color(hex: 0x9e4c2e),
+                               keybed: Color(hex: 0x7d453b), tray: Color(hex: 0x9e4c2e),
                                button: Color(hex: 0x8e574a), legend: Color(hex: 0xffffff), unlitLegend: Color(hex: 0xd9a58e))
-    static let all = [black, purple, orange]
+    static let blackGreen = Finish(name: "Black-Green", caseTop: Color(hex: 0x313134), caseBottom: Color(hex: 0x242427),
+                                   keybed: Color(hex: 0x66c6b7), tray: Color(hex: 0x5cc0b0),
+                                   button: Color(hex: 0x74cdc0), legend: Color(hex: 0xffffff), unlitLegend: Color(hex: 0x24443f),
+                                   label: Color(hex: 0xdadada), keyLabel: Color(hex: 0x1f3a36), slit: Color(hex: 0x1d2f2c))
+    static let coolGray = Finish(name: "Cool Gray", caseTop: Color(hex: 0xeae3dd), caseBottom: Color(hex: 0xd8cfc8),
+                                 keybed: Color(hex: 0x383b3e), tray: Color(hex: 0x3f3f43),
+                                 button: Color(hex: 0x383b3e), legend: Color(hex: 0xffffff), unlitLegend: Color(hex: 0x6a6f73),
+                                 label: Color(hex: 0x3a3a3c), keyLabel: Color(hex: 0x9a9fa3), slit: Color(hex: 0x55595c))
+    static let whiteBlue = Finish(name: "White-Blue", caseTop: Color(hex: 0xf2ede7), caseBottom: Color(hex: 0xe2dbd3),
+                                  keybed: Color(hex: 0x4d6c92), tray: Color(hex: 0x4e6b8e),
+                                  button: Color(hex: 0x4f6c90), legend: Color(hex: 0xffffff), unlitLegend: Color(hex: 0xc5d3e2),
+                                  label: Color(hex: 0x3b4655), keyLabel: Color(hex: 0xdce5ef), slit: Color(hex: 0x2b3d55))
+    static let all = [black, purple, orange, blackGreen, coolGray, whiteBlue]
 }
 
 extension Color {
@@ -245,36 +263,53 @@ struct KeyCap: View {
     var size: CGSize
     var finish: Finish
     var led: Double
+
+    // A lit slit is the white LED; an unlit one shows the finish's groove.
+    private var ledColor: Color {
+        let lit = Color(red: 0.86, green: 0.95, blue: 1.0)
+        guard let slit = finish.slit else { return lit.opacity(0.10 + 0.9 * led) }
+        return led > 0.2 ? lit.opacity(led) : slit
+    }
     var pressed: Bool
     var label: String?
     var labelSize: CGFloat
 
     var body: some View {
+        // Silicone keys squash rather than travel: the cap flattens towards
+        // the bed, bulges a little sideways and loses its shadow, then
+        // springs back with a small rubbery overshoot.
+        let squash: CGFloat = pressed ? 0.92 : 1
+        let bulge: CGFloat = pressed ? 1.035 : 1
+        let base = finish.keybed
         ZStack {
             Capsule()
-                .fill(Color.black.opacity(0.65))
-                .offset(y: pressed ? size.width * 0.02 : size.width * 0.07)
-                .blur(radius: size.width * 0.05)
-            Capsule()
-                .fill(LinearGradient(colors: [finish.key.lighter(pressed ? 0.0 : 0.05), finish.key.lighter(-0.0)],
-                                     startPoint: .top, endPoint: .bottom))
-                .overlay(Capsule().stroke(Color.white.opacity(0.05), lineWidth: 0.6))
-                .scaleEffect(pressed ? 0.97 : 1)
-            // LED light pipe.
-            let slitH = size.height * (label == nil ? 0.52 : 0.42)
-            Capsule()
-                .fill(Color(red: 0.86, green: 0.95, blue: 1.0).opacity(0.10 + 0.9 * led))
-                .frame(width: max(1.2, size.width * 0.11), height: slitH)
-                .shadow(color: Color(red: 0.7, green: 0.92, blue: 1).opacity(led * 0.9), radius: size.width * 0.22 * led)
-                .offset(y: label == nil ? 0 : -size.height * 0.12)
-            if let label {
-                Text(label)
-                    .font(.system(size: labelSize, weight: .regular))
-                    .foregroundColor(finish.legend.opacity(0.85))
-                    .offset(y: size.height * 0.28)
+                .fill(Color.black.opacity(pressed ? 0.3 : 0.55))
+                .offset(y: pressed ? size.width * 0.01 : size.width * 0.07)
+                .blur(radius: size.width * (pressed ? 0.02 : 0.06))
+            ZStack {
+                Capsule()
+                    .fill(LinearGradient(colors: pressed ? [base.lighter(0.0), base.lighter(-0.035)]
+                                                         : [base.lighter(0.075), base.lighter(-0.01)],
+                                         startPoint: .top, endPoint: .bottom))
+                    .overlay(Capsule().stroke(Color.white.opacity(pressed ? 0.025 : 0.07), lineWidth: 0.6))
+                // LED light pipe.
+                let slitH = size.height * (label == nil ? 0.52 : 0.42)
+                Capsule()
+                    .fill(ledColor)
+                    .frame(width: max(1.2, size.width * 0.11), height: slitH)
+                    .shadow(color: Color(red: 0.7, green: 0.92, blue: 1).opacity(led * 0.9), radius: size.width * 0.22 * led)
+                    .offset(y: label == nil ? 0 : -size.height * 0.12)
+                if let label {
+                    Text(label)
+                        .font(.system(size: labelSize, weight: .regular))
+                        .foregroundColor((finish.keyLabel ?? finish.legend).opacity(0.85))
+                        .offset(y: size.height * 0.28)
+                }
             }
+            .scaleEffect(x: bulge, y: squash, anchor: .bottom)
         }
         .frame(width: size.width, height: size.height)
+        .animation(pressed ? .easeOut(duration: 0.03) : .spring(response: 0.17, dampingFraction: 0.45), value: pressed)
     }
 }
 

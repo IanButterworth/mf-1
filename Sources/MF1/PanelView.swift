@@ -51,7 +51,7 @@ struct PanelView: View {
     private func label(_ text: String, _ x: CGFloat, _ y: CGFloat, _ s: CGFloat) -> some View {
         Text(text)
             .font(.custom("Share Tech Mono", size: 2.35 * s))
-            .foregroundColor(finish.legend)
+            .foregroundColor(finish.label ?? finish.legend)
             .fixedSize()
             .position(at(x, y, s))
     }
@@ -197,8 +197,9 @@ struct PanelView: View {
 
     private func keybed(_ s: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
+            // The bed sits below the keys, so it is the same silicone in shade.
             RoundedRectangle(cornerRadius: 6 * s)
-                .fill(finish.keybed)
+                .fill(finish.keybed.lighter(-0.035))
                 .overlay(RoundedRectangle(cornerRadius: 6 * s)
                     .stroke(LinearGradient(colors: [.black.opacity(0.6), .white.opacity(0.08)], startPoint: .top, endPoint: .bottom),
                             lineWidth: 0.5 * s))
