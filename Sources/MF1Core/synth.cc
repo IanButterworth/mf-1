@@ -35,6 +35,9 @@ Synth::Synth() {
   memcpy(edit_.voice, kInitVoice, kVoiceSize);
   memcpy(voice_, kInitVoice, kVoiceSize);
   memset(acc_, 0, sizeof(acc_));
+  mach_timebase_info_data_t t;
+  mach_timebase_info(&t);
+  nsPerTick_ = (double)t.numer / t.denom;
 }
 
 void Synth::prepare(double sampleRate) {
@@ -64,6 +67,24 @@ int Synth::currentRate() const {
 double Synth::stepSamples(int rate) const {
   double beats = kRateWholeNotes[std::max(0, std::min(kNumRates - 1, rate))] * 4.0;
   return beats * 60.0 / std::max(30, std::min(300, g_.tempo)) * sr_;
+}
+
+// MIDI clock ticks, 24 to the quarter note, of the step with the given count.
+int Synth::stepTicks(int rate, int count) const {
+  int base = (int)std::lround(96.0 * kRateWholeNotes[std::max(0, std::min(kNumRates - 1, rate))]);
+  int swing = seqOn_ ? patterns_[playPattern_].swing : arp_.swing;
+  int on = (int)std::lround(2 * base * std::max(50, std::min(75, swing)) / 100.0);
+  return (count & 1) ? 2 * base - on : on;
+}
+
+// Samples of the step with the given count, after swing.
+double Synth::stepLength(int rate, int count) const {
+  if (externalClock() && tickSamples_ > 0) return stepTicks(rate, count) * tickSamples_;
+  double base = stepSamples(rate);
+  int swing = seqOn_ ? patterns_[playPattern_].swing : arp_.swing;
+  // Swing lengthens the on-beat step and shortens the off-beat one.
+  double sw = std::max(50, std::min(75, swing)) / 100.0;
+  return (count & 1) ? base * (2.0 - 2.0 * sw) : base * 2.0 * sw;
 }
 
 void Synth::emit(uint8_t status, uint8_t note, uint8_t vel) { noteOut.push(NoteEvent{status, note, vel}); }
@@ -97,7 +118,7 @@ void Synth::loadPreset(int index, bool fromSeq) {
   if (wasMono != edit_.mono) allNotesOff();
   applyEdit();
   currentPreset.store(current_, std::memory_order_relaxed);
-  if (fromSeq) presetSwitches.fetch_add(1, std::memory_order_relaxed);
+  if (fromSeq) presetSwitches.fetch_add(1, std::memory_order_release);
   // Sounding notes keep their old voice data, as on the hardware.
 }
 
@@ -114,12 +135,13 @@ uint32_t Synth::playNote(int note, int velocity) {
   double glide = g_.glideTime / 100.0;
   if (edit_.mono) {
     for (int i = 0; i < monoCount_; i++)
-      if (monoStack_[i] == note) {
-        memmove(&monoStack_[i], &monoStack_[i + 1], sizeof(int) * (monoCount_ - i - 1));
+      if (monoStack_[i].note == note) {
+        memmove(&monoStack_[i], &monoStack_[i + 1], sizeof(MonoKey) * (monoCount_ - i - 1));
         monoCount_--;
         break;
       }
-    if (monoCount_ < 32) monoStack_[monoCount_++] = note;
+    // The sounding note must stay on the stack, so a full stack forgets its oldest key.
+    if (monoCount_ == 32) memmove(&monoStack_[0], &monoStack_[1], sizeof(MonoKey) * --monoCount_);
     VoiceSlot& v = voices_[0];
     int from = lastNote_;
     if (v.active && v.keyDown) {
@@ -138,6 +160,7 @@ uint32_t Synth::playNote(int note, int velocity) {
     v.keyDown = true;
     v.sustained = false;
     v.serial = ++nextSerial_;
+    monoStack_[monoCount_++] = MonoKey{note, v.serial};
     lastNote_ = note;
     return v.serial;
   }
@@ -165,31 +188,39 @@ uint32_t Synth::playNote(int note, int velocity) {
   return v.serial;
 }
 
+// Removes one entry from the mono key stack. If it was the sounding note, the
+// voice goes back to the latest key still held, or is released.
+void Synth::monoDrop(int index) {
+  MonoKey gone = monoStack_[index];
+  memmove(&monoStack_[index], &monoStack_[index + 1], sizeof(MonoKey) * (monoCount_ - index - 1));
+  monoCount_--;
+  VoiceSlot& v = voices_[0];
+  if (!v.active || !v.keyDown || v.serial != gone.serial) return;
+  if (monoCount_ > 0) {
+    // Legato, without retriggering.
+    const MonoKey& back = monoStack_[monoCount_ - 1];
+    v.dx.transfer(back.note);
+    v.dx.update(voice_);
+    if (g_.glideTime > 0) v.dx.setGlideFrom(gone.note, g_.glideTime / 100.0);
+    v.note = back.note;
+    v.serial = back.serial;
+    lastNote_ = back.note;
+    return;
+  }
+  v.keyDown = false;
+  if (sustain_)
+    v.sustained = true;
+  else
+    keyupVoice(v);
+}
+
 void Synth::releaseNote(int note) {
   if (edit_.mono) {
     for (int i = 0; i < monoCount_; i++)
-      if (monoStack_[i] == note) {
-        memmove(&monoStack_[i], &monoStack_[i + 1], sizeof(int) * (monoCount_ - i - 1));
-        monoCount_--;
+      if (monoStack_[i].note == note) {
+        monoDrop(i);
         break;
       }
-    VoiceSlot& v = voices_[0];
-    if (!v.active || !v.keyDown || v.note != note) return;
-    if (monoCount_ > 0) {
-      // Return to the latest key still held, without retriggering.
-      int back = monoStack_[monoCount_ - 1];
-      v.dx.transfer(back);
-      v.dx.update(voice_);
-      if (g_.glideTime > 0) v.dx.setGlideFrom(note, g_.glideTime / 100.0);
-      v.note = back;
-      lastNote_ = back;
-      return;
-    }
-    v.keyDown = false;
-    if (sustain_)
-      v.sustained = true;
-    else
-      keyupVoice(v);
     return;
   }
   for (auto& v : voices_) {
@@ -207,7 +238,11 @@ void Synth::releaseNote(int note) {
 // a later note on the same pitch short.
 void Synth::releaseSerial(uint32_t serial, int note) {
   if (edit_.mono) {
-    if (voices_[0].serial == serial || voices_[0].note != note) releaseNote(note);
+    for (int i = 0; i < monoCount_; i++)
+      if (monoStack_[i].serial == serial) {
+        monoDrop(i);
+        break;
+      }
     return;
   }
   for (auto& v : voices_) {
@@ -294,12 +329,14 @@ void Synth::scheduleNoteOff(int note, uint32_t serial, double samples) {
 
 // ------------------------------------------------------------------ arp
 
-int Synth::arpNextNote() {
+int Synth::arpNextNote(int& velocity) {
   int n = arpHeldCount_;
   if (n == 0) return -1;
+  // Sorts indexes rather than notes, so each note keeps its own velocity.
   int sorted[32];
-  memcpy(sorted, arpHeld_, sizeof(int) * n);
-  if (arp_.mode != kArpOrder) std::sort(sorted, sorted + n);
+  for (int i = 0; i < n; i++) sorted[i] = i;
+  if (arp_.mode != kArpOrder)
+    std::sort(sorted, sorted + n, [this](int a, int b) { return arpHeld_[a] < arpHeld_[b]; });
   int total = n * std::max(1, std::min(4, arp_.octaves));
   int idx = 0;
   switch (arp_.mode) {
@@ -337,21 +374,37 @@ int Synth::arpNextNote() {
       arpIndex_ = (arpIndex_ + 1) % (total * 2);
       break;
   }
-  return sorted[idx % n] + 12 * (idx / n);
+  velocity = arpHeldVel_[sorted[idx % n]];
+  return arpHeld_[sorted[idx % n]] + 12 * (idx / n);
 }
 
 void Synth::stepArp() {
-  int note = arpNextNote();
+  int vel = 0;
+  int note = arpNextNote(vel);
   if (note < 0 || note > 127) return;
-  int vel = arpHeldVel_[0];
   double len = curStepLen_ * std::max(20, std::min(100, arp_.gate)) / 100.0;
   uint32_t serial = playNote(note, vel);
   emit(0x90, (uint8_t)note, (uint8_t)vel);
-  // A full gate still releases just before the next step.
-  scheduleNoteOff(note, serial, std::max(64.0, len - 32.0));
+  // A full gate still releases a block before the next step is due, so the
+  // release cannot land after the block that step fires in.
+  scheduleNoteOff(note, serial, std::max(64.0, len - N));
 }
 
 // ------------------------------------------------------------------ seq
+
+void Synth::switchChainPattern() {
+  if (!seqOn_ || !chainDue_) return;
+  chainDue_ = false;
+  // Chain plays this many patterns in turn from the selected one.
+  int chain = std::max(1, std::min(kSeqPatterns, patterns_[selectedPattern_].chain));
+  chainPos_ = (chainPos_ + 1) % chain;
+  int next = (selectedPattern_ + chainPos_) % kSeqPatterns;
+  if (next != playPattern_) {
+    playPattern_ = next;
+    if (patterns_[next].voice != current_) loadPreset(patterns_[next].voice, true);
+  }
+  seqPatternPlaying.store(playPattern_, std::memory_order_relaxed);
+}
 
 void Synth::stepSeq() {
   SeqPattern& pat = patterns_[playPattern_];
@@ -360,29 +413,28 @@ void Synth::stepSeq() {
   const SeqStep& s = pat.steps[step_];
   double stepLen = curStepLen_ > 0 ? curStepLen_ : stepSamples(s.rate);
   double gate = std::max(20, std::min(100, pat.gate)) / 100.0;
+  // A long note ties over the next steps, each at its own rate; the gate cuts the last one.
+  double len = stepLen, last = stepLen;
+  for (int k = 1; k < std::max(1, (int)s.length); k++) {
+    last = stepLength(pat.steps[(step_ + k) % length].rate, stepCount_ + k);
+    len += last;
+  }
+  len -= last * (1 - gate);
   for (int i = 0; i < kStepNotes; i++) {
     if (!s.notes[i]) continue;
     int note = s.notes[i] + pat.transpose;
     if (note < 0 || note > 127) continue;
     int vel = s.velocity[i] ? s.velocity[i] : g_.keyVelocity;
-    double len = ((std::max(1, (int)s.length) - 1) + gate) * stepLen;
     uint32_t serial = playNote(note, vel);
     emit(0x90, (uint8_t)note, (uint8_t)vel);
-    scheduleNoteOff(note, serial, std::max(64.0, len - 32.0));
+    scheduleNoteOff(note, serial, std::max(64.0, len - N));
   }
   seqStep.store(step_, std::memory_order_relaxed);
   step_++;
   if (step_ >= length) {
     step_ = 0;
-    // Chain plays this many patterns in turn from the selected one.
-    int chain = std::max(1, std::min(kSeqPatterns, patterns_[selectedPattern_].chain));
-    chainPos_ = (chainPos_ + 1) % chain;
-    int next = (selectedPattern_ + chainPos_) % kSeqPatterns;
-    if (next != playPattern_) {
-      playPattern_ = next;
-      if (patterns_[next].voice != current_) loadPreset(patterns_[next].voice, true);
-    }
-    seqPatternPlaying.store(playPattern_, std::memory_order_relaxed);
+    // The next pattern and its voice wait until its first step is due.
+    chainDue_ = true;
   }
 }
 
@@ -390,8 +442,9 @@ void Synth::stepSeq() {
 
 void Synth::startClock() {
   stepCount_ = 0;
-  clockTicks_ = 0;
+  ticksLeft_ = 0;
   phase_ = 0;
+  chainDue_ = false;
   running_ = true;
 }
 
@@ -415,13 +468,10 @@ void Synth::advanceClock(int frames) {
     }
   }
   if (!running_ || externalClock()) return;
-  phase_ -= frames;
-  while (phase_ <= 0 && running_) {
-    double base = stepSamples(currentRate());
-    int swing = seqOn_ ? patterns_[playPattern_].swing : arp_.swing;
-    // Swing lengthens the on-beat step and shortens the off-beat one.
-    double sw = std::max(50, std::min(75, swing)) / 100.0;
-    double len = (stepCount_ & 1) ? base * (2.0 - 2.0 * sw) : base * 2.0 * sw;
+  // A step due inside this block fires at its start, early by its offset.
+  while (phase_ < frames && running_) {
+    switchChainPattern();
+    double len = stepLength(currentRate(), stepCount_);
     curStepLen_ = len;
     stepLateness_ = -phase_;
     doStep();
@@ -429,6 +479,7 @@ void Synth::advanceClock(int frames) {
     stepCount_++;
     phase_ += len;
   }
+  phase_ -= frames;
 }
 
 // ------------------------------------------------------------------ commands
@@ -436,14 +487,8 @@ void Synth::advanceClock(int frames) {
 void Synth::handle(const Command& c) {
   switch (c.type) {
     case Command::NoteOn:
-      if (c.stamp) {
-        static const double nsPerTick = [] {
-          mach_timebase_info_data_t t;
-          mach_timebase_info(&t);
-          return (double)t.numer / t.denom;
-        }();
-        lastNoteQueueNs.store((uint64_t)((mach_absolute_time() - c.stamp) * nsPerTick), std::memory_order_relaxed);
-      }
+      if (c.stamp)
+        lastNoteQueueNs.store((uint64_t)((mach_absolute_time() - c.stamp) * nsPerTick_), std::memory_order_relaxed);
       if (c.b == 0)
         noteOff(c.a, c.c != 0);
       else
@@ -565,6 +610,7 @@ void Synth::handle(const Command& c) {
         playPattern_ = selectedPattern_;
         chainPos_ = 0;
         step_ = 0;
+        if (patterns_[playPattern_].voice != current_) loadPreset(patterns_[playPattern_].voice, true);
         startClock();
         playing.store(true);
         seqPatternPlaying.store(playPattern_);
@@ -586,10 +632,15 @@ void Synth::handle(const Command& c) {
         playPattern_ = selectedPattern_;
         chainPos_ = 0;
         step_ = 0;
+        if (patterns_[playPattern_].voice != current_) loadPreset(patterns_[playPattern_].voice, true);
         startClock();
         playing.store(true);
+        seqPatternPlaying.store(playPattern_);
       }
-      if (arpOn_) clockTicks_ = 0;
+      if (arpOn_) {
+        ticksLeft_ = 0;
+        stepCount_ = 0;
+      }
       break;
     case Command::ClockStop:
       if (seqOn_ && patterns_[playPattern_].sync) {
@@ -598,19 +649,29 @@ void Synth::handle(const Command& c) {
         seqStep.store(-1);
       }
       break;
-    case Command::ClockTick:
+    case Command::ClockTick: {
+      // Gates follow the clock's own tempo, a running average of the tick gaps.
+      // A long gap means the clock paused, so it is left out.
+      double gap = sampleTime_ - lastTickAt_;
+      if (lastTickAt_ >= 0 && gap > 0 && gap < sr_ / 4 && (tickSamples_ == 0 || gap < 4 * tickSamples_))
+        tickSamples_ = tickSamples_ > 0 ? tickSamples_ + (gap - tickSamples_) * 0.1 : gap;
+      lastTickAt_ = sampleTime_;
       if (running_ && externalClock()) {
-        // 24 ticks per quarter note.
-        int rate = std::max(0, std::min(kNumRates - 1, currentRate()));
-        double ticks = 96.0 * kRateWholeNotes[rate];
-        int perStep = std::max(1, (int)std::lround(ticks));
-        if (clockTicks_ % perStep == 0) {
-          curStepLen_ = stepSamples(rate);
+        if (ticksLeft_ <= 0) {
+          switchChainPattern();
+          int rate = currentRate();
+          ticksLeft_ = stepTicks(rate, stepCount_);
+          curStepLen_ = stepLength(rate, stepCount_);
+          // Offs scheduled here also count down in this block's clock advance.
+          stepLateness_ = -N;
           doStep();
+          stepLateness_ = 0;
+          stepCount_++;
         }
-        clockTicks_++;
+        ticksLeft_--;
       }
       break;
+    }
   }
 }
 
@@ -628,6 +689,7 @@ void Synth::renderBlock() {
   while (midiQueue.pop(c)) handle(c);
 
   advanceClock(N);
+  sampleTime_ += N;
 
   int32_t lfoVal = lfo_.getsample();
   int32_t lfoDelay = lfo_.getdelay();
@@ -742,12 +804,7 @@ void Synth::render(float* out, int frames) {
   }
   updateSounding();
   peak.store(std::max(pk, peak.load(std::memory_order_relaxed) * 0.9f), std::memory_order_relaxed);
-  static const double nsPerTick = [] {
-    mach_timebase_info_data_t t;
-    mach_timebase_info(&t);
-    return (double)t.numer / t.denom;
-  }();
-  double ns = (double)(mach_absolute_time() - t0) * nsPerTick;
+  double ns = (double)(mach_absolute_time() - t0) * nsPerTick_;
   float load = (float)(ns / (frames / sr_ * 1e9));
   float prev = cpuLoad.load(std::memory_order_relaxed);
   cpuLoad.store(prev + (load - prev) * 0.05f, std::memory_order_relaxed);

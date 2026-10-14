@@ -153,6 +153,7 @@ class Synth {
   uint32_t playNote(int note, int velocity);
   void releaseSerial(uint32_t serial, int note);
   void releaseNote(int note);
+  void monoDrop(int index);
   void keyupVoice(VoiceSlot& v);
   void allNotesOff();
   void loadPreset(int index, bool fromSeq);
@@ -166,9 +167,12 @@ class Synth {
   void stepSeq();
   void scheduleNoteOff(int note, uint32_t serial, double samples);
   void updateSounding();
-  int arpNextNote();
+  int arpNextNote(int& velocity);
   void emit(uint8_t status, uint8_t note, uint8_t vel);
   double stepSamples(int rate) const;
+  int stepTicks(int rate, int count) const;
+  double stepLength(int rate, int count) const;
+  void switchChainPattern();
   bool externalClock() const;
   int currentRate() const;
 
@@ -185,7 +189,11 @@ class Synth {
   int cursor_ = 0;
   bool sustain_ = false;
   int opMute_ = 0;
-  int monoStack_[32];
+  struct MonoKey {
+    int note;
+    uint32_t serial;
+  };
+  MonoKey monoStack_[32];
   int monoCount_ = 0;
   int lastNote_ = -1;
 
@@ -204,11 +212,17 @@ class Synth {
   int playPattern_ = 0;
   int step_ = 0;
   int chainPos_ = 0;
+  // Set after a pattern's last step; the chain moves on when the next step is due.
+  bool chainDue_ = false;
 
   bool running_ = false;
   double phase_ = 0;
   int stepCount_ = 0;
-  int clockTicks_ = 0;
+  int ticksLeft_ = 0;  // MIDI clock ticks until the next step
+  double sampleTime_ = 0;
+  double lastTickAt_ = -1;
+  double tickSamples_ = 0;  // average time between MIDI clock ticks, 0 until measured
+  double nsPerTick_ = 1;
 
   struct PendingOff {
     int note;
@@ -220,7 +234,7 @@ class Synth {
   uint32_t nextSerial_ = 0;
   // Length in samples of the step being played, after swing.
   double curStepLen_ = 0;
-  // How late, in samples, the current step fired after its due time.
+  // How late, in samples, the current step fired after its due time; negative when early.
   double stepLateness_ = 0;
   int pendingCount_ = 0;
 
