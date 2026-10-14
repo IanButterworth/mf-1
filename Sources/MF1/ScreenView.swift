@@ -44,7 +44,7 @@ struct ScreenView: View {
     }
 
     private func pill(_ ctx: inout GraphicsContext, _ label: String) {
-        let r = CGRect(x: 22, y: 205, width: 196, height: 25)
+        let r = ScreenLayout.pill
         box(&ctx, r, on: true, radius: 6)
         text(&ctx, label, CGPoint(x: r.midX, y: r.midY), size: 15)
     }
@@ -131,8 +131,7 @@ struct ScreenView: View {
     private func drawGrid(_ ctx: inout GraphicsContext) {
         let ps = model.params
         for i in 0..<4 {
-            let col = CGFloat(i % 2), row = CGFloat(i / 2)
-            let r = CGRect(x: 13 + col * 111, y: 41 + row * 81, width: 103, height: 71)
+            let r = ScreenLayout.grid(i)
             guard i < ps.count, !ps[i].name.isEmpty else { continue }
             let p = ps[i]
             box(&ctx, r)
@@ -164,8 +163,7 @@ struct ScreenView: View {
         for pos in 0..<6 {
             let effect = FxEffect(rawValue: Int(mf1_fx_order(Int32(pos))))!
             let on = mf1_fx_get(effect.ccs[3]) != 0
-            let col = CGFloat(pos % 3), row = CGFloat(pos / 3)
-            let r = CGRect(x: 7 + col * 77, y: 44 + row * 80, width: 72, height: 58)
+            let r = ScreenLayout.fxSlot(pos)
             box(&ctx, r, on: on, radius: 6)
             let ink = on ? Self.ink : Color(white: 0.9)
             if effect == .distortion {
@@ -192,7 +190,7 @@ struct ScreenView: View {
             let cur = model.preset
             for row in -2...2 {
                 let i = ((cur + row) % 128 + 128) % 128
-                let r = CGRect(x: 14, y: 116 + CGFloat(row) * 32 - 14, width: 212, height: 28)
+                let r = ScreenLayout.presetRow(row)
                 if row == 0 { box(&ctx, r, radius: 6) }
                 text(&ctx, String(format: "%03d %@", i + 1, Engine.presetName(i)), CGPoint(x: 26, y: r.midY),
                      size: row == 0 ? 17 : 15, color: Self.ink.opacity(row == 0 ? 1 : 0.55), anchor: .leading)
@@ -218,7 +216,7 @@ struct ScreenView: View {
             text(&ctx, "Bulk Dump: 32 Voices", CGPoint(x: 120, y: 50), size: 16)
             text(&ctx, "1. \(Engine.pendingName(0))", CGPoint(x: 120, y: 74), size: 13, color: Self.ink.opacity(0.7))
             for i in 0..<4 {
-                let r = CGRect(x: 13 + CGFloat(i % 2) * 111, y: 92 + CGFloat(i / 2) * 54, width: 103, height: 46)
+                let r = ScreenLayout.bankBox(i)
                 box(&ctx, r)
                 text(&ctx, "Bank \(["A", "B", "C", "D"][i])", CGPoint(x: r.midX, y: r.midY - 7), size: 16)
                 text(&ctx, "KNOB\(i + 1)", CGPoint(x: r.midX, y: r.midY + 12), size: 10, color: Self.ink.opacity(0.6))
@@ -229,7 +227,7 @@ struct ScreenView: View {
         if model.resetting {
             text(&ctx, "Reset Patches", CGPoint(x: 120, y: 54), size: 17)
             for i in 0..<4 {
-                let r = CGRect(x: 13 + CGFloat(i % 2) * 111, y: 76 + CGFloat(i / 2) * 58, width: 103, height: 50)
+                let r = ScreenLayout.resetBox(i)
                 box(&ctx, r, on: i == model.resetBank)
                 text(&ctx, "Bank \(["A", "B", "C", "D"][i])", CGPoint(x: r.midX, y: r.midY), size: 17,
                      color: i == model.resetBank ? Self.ink : Color(white: 0.9))
@@ -240,13 +238,13 @@ struct ScreenView: View {
         if let name = model.renaming {
             text(&ctx, "Rename", CGPoint(x: 120, y: 52), size: 17)
             for i in 0..<10 {
-                let r = CGRect(x: 10 + CGFloat(i) * 22, y: 78, width: 20, height: 30)
+                let r = ScreenLayout.renameCell(i)
                 box(&ctx, r, on: i == model.renameCursor, radius: 4)
                 text(&ctx, String(name[i]), CGPoint(x: r.midX, y: r.midY), size: 17, weight: .medium)
             }
             let classes = ["A-Z", "a-z", "Symbol", "0-9"]
             for i in 0..<4 {
-                let r = CGRect(x: 10 + CGFloat(i) * 56, y: 126, width: 52, height: 26)
+                let r = ScreenLayout.renameClass(i)
                 box(&ctx, r, on: i == model.renameClass, radius: 5)
                 text(&ctx, classes[i], CGPoint(x: r.midX, y: r.midY), size: 12,
                      color: i == model.renameClass ? Self.ink : Color(white: 0.9))
@@ -257,7 +255,7 @@ struct ScreenView: View {
         }
         if let src = model.copying {
             text(&ctx, "Copy Voice", CGPoint(x: 120, y: 56), size: 17)
-            let r = CGRect(x: 20, y: 84, width: 200, height: 56)
+            let r = ScreenLayout.copyBox
             box(&ctx, r)
             text(&ctx, String(format: "%03d %@", src + 1, Engine.presetName(src)), CGPoint(x: r.midX, y: r.midY), size: 17)
             text(&ctx, "KNOB4 source", CGPoint(x: 120, y: 162), size: 12, color: Self.ink.opacity(0.7))
@@ -370,4 +368,31 @@ struct ScreenView: View {
         box(&ctx, badge, radius: 8)
         text(&ctx, String(format: "%02d", alg + 1), CGPoint(x: badge.midX, y: badge.midY), size: 15, weight: .medium)
     }
+}
+
+// Where things are on the 240x240 screen, shared by drawing and clicks.
+enum ScreenLayout {
+    static let title = CGRect(x: 0, y: 0, width: 240, height: 32)
+    static let pill = CGRect(x: 22, y: 205, width: 196, height: 25)
+    static let copyBox = CGRect(x: 20, y: 84, width: 200, height: 56)
+
+    // Parameter boxes: KNOB1 top left .. KNOB4 bottom right.
+    static func grid(_ i: Int) -> CGRect {
+        CGRect(x: 13 + CGFloat(i % 2) * 111, y: 41 + CGFloat(i / 2) * 81, width: 103, height: 71)
+    }
+    static func fxSlot(_ pos: Int) -> CGRect {
+        CGRect(x: 7 + CGFloat(pos % 3) * 77, y: 44 + CGFloat(pos / 3) * 80, width: 72, height: 58)
+    }
+    // Preset list rows, -2...2 around the current preset.
+    static func presetRow(_ row: Int) -> CGRect {
+        CGRect(x: 14, y: 116 + CGFloat(row) * 32 - 14, width: 212, height: 28)
+    }
+    static func bankBox(_ i: Int) -> CGRect {
+        CGRect(x: 13 + CGFloat(i % 2) * 111, y: 92 + CGFloat(i / 2) * 54, width: 103, height: 46)
+    }
+    static func resetBox(_ i: Int) -> CGRect {
+        CGRect(x: 13 + CGFloat(i % 2) * 111, y: 76 + CGFloat(i / 2) * 58, width: 103, height: 50)
+    }
+    static func renameCell(_ i: Int) -> CGRect { CGRect(x: 10 + CGFloat(i) * 22, y: 78, width: 20, height: 30) }
+    static func renameClass(_ i: Int) -> CGRect { CGRect(x: 10 + CGFloat(i) * 56, y: 126, width: 52, height: 26) }
 }

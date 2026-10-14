@@ -62,6 +62,12 @@ current voice from the File menu.
 
 Drag knobs up or down, or use the scroll wheel (Option for fine steps). Play the keys with the
 mouse or the Mac keyboard (A W S E D R F G Y H U J K O L P ; [ ' from F3, Z/X for OCT−/OCT+).
+The screen also works by mouse:
+- Click a value box to step through short lists of choices (shift-click or right-click steps back). Drag up or down, or scroll, on any box to change its value as with its knob.
+- On the FX page, click an effect to select it, then click it again to switch it on or off.
+- Click the bottom bar for the next page.
+- Click the voice name for a menu of every preset, or drag on the name to scroll through them.
+
 Hold SAVE to save, as on the hardware. The window is frameless by default: drag any bare part of
 the case to move it, and use ⌘W or ⌘Q to close. View › Frameless Window (⌃⌘F) switches to a
 normal window. Help › MF-1 Keyboard and Controls lists the rest.

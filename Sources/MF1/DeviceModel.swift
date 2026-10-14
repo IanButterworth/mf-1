@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import MF1Core
 import SwiftUI
@@ -832,4 +833,159 @@ final class PatchList: ObservableObject {
         }
         if c != current { current = c }
     }
+}
+
+// ------------------------------------------------------------------ screen clicks
+
+enum ScreenTarget: Equatable {
+    case none, title, pill, popup
+    case grid(Int), fxSlot(Int), presetRow(Int), bankBox(Int), resetBox(Int)
+    case renameCell(Int), renameClass(Int), copyBox
+}
+
+extension DeviceModel {
+    // What is under a point on the 240x240 screen, in the order it is drawn.
+    func screenTarget(at p: CGPoint) -> ScreenTarget {
+        if ScreenLayout.title.contains(p) { return .title }
+        if mf1_bank_pending() {
+            for i in 0..<4 where ScreenLayout.bankBox(i).contains(p) { return .bankBox(i) }
+            return .none
+        }
+        if resetting {
+            for i in 0..<4 where ScreenLayout.resetBox(i).contains(p) { return .resetBox(i) }
+            return ScreenLayout.pill.contains(p) ? .pill : .none
+        }
+        if renaming != nil {
+            for i in 0..<10 where ScreenLayout.renameCell(i).contains(p) { return .renameCell(i) }
+            for i in 0..<4 where ScreenLayout.renameClass(i).contains(p) { return .renameClass(i) }
+            return ScreenLayout.pill.contains(p) ? .pill : .none
+        }
+        if copying != nil {
+            if ScreenLayout.copyBox.contains(p) { return .copyBox }
+            return ScreenLayout.pill.contains(p) ? .pill : .none
+        }
+        if let popup {
+            if popup == .presets {
+                for r in -2...2 where ScreenLayout.presetRow(r).contains(p) { return .presetRow(r) }
+            }
+            return .popup
+        }
+        if ScreenLayout.pill.contains(p) { return .pill }
+        switch mode {
+        case .home: return .none
+        case .fx:
+            for i in 0..<6 where ScreenLayout.fxSlot(i).contains(p) { return .fxSlot(i) }
+        default:
+            for i in 0..<4 where ScreenLayout.grid(i).contains(p) { return .grid(i) }
+        }
+        return .none
+    }
+
+    func screenClick(_ t: ScreenTarget, back: Bool, double: Bool) {
+        let dir = back ? -1 : 1
+        switch t {
+        case .grid(let i):
+            let ps = params
+            guard i < ps.count, !ps[i].name.isEmpty else { return }
+            let p = ps[i]
+            if p.action != nil {
+                turnKnob(i, dir)
+            } else if p.range.count <= 12 {
+                // Short lists step through their choices and wrap around.
+                let n = p.range.count
+                let v = p.range.lowerBound + ((p.get() - p.range.lowerBound + dir) % n + n) % n
+                p.set(v)
+                showPill(p.name, p.format(v))
+                objectWillChange.send()
+            } else {
+                showPill(p.name, p.format(p.get()))
+            }
+        case .fxSlot(let i):
+            if fxGrabbed {
+                if i != fxSelected { mf1_fx_swap(Int32(fxSelected), Int32(i)) }
+                fxSelected = i
+            } else if i == fxSelected || double {
+                fxSelected = i
+                let effect = FxEffect(rawValue: Int(mf1_fx_order(Int32(i))))!
+                let on = mf1_fx_get(effect.ccs[3]) != 0
+                mf1_fx_set(effect.ccs[3], on ? 0 : 1)
+                showPill(effect.title, on ? "Off" : "On")
+            } else {
+                fxSelected = i
+            }
+            objectWillChange.send()
+        case .pill:
+            if resetting || renaming != nil || copying != nil {
+                turnSelect(1)
+            } else if mode != .fx && mode != .home && pageCount > 1 {
+                // Pages wrap around, so one button reaches all of them.
+                let n = pageCount
+                let next = ((currentPage + dir) % n + n) % n
+                if mode == .edit { editPages[editTarget] = next } else { pages[mode] = next }
+            }
+        case .presetRow(let r):
+            if r == 0 { popup = nil } else { selectPreset(((preset + r) % 128 + 128) % 128) }
+        case .popup:
+            popup = nil
+        case .bankBox(let i):
+            turnKnob(i, 1)
+        case .resetBox(let i):
+            resetBank = i
+        case .renameCell(let i):
+            renameCursor = i
+        case .renameClass(let i):
+            renameClass = i
+        case .title, .copyBox, .none:
+            break
+        }
+    }
+
+    // A drag or scroll over a target, in knob detents (up is positive).
+    func screenTurn(_ t: ScreenTarget, _ delta: Int) {
+        guard delta != 0 else { return }
+        switch t {
+        case .title, .presetRow: turnPresets(delta)
+        case .popup:
+            if popup == .presets { turnPresets(delta) }
+            if popup == .algorithm { turnAlgorithm(delta) }
+        case .grid(let i): turnKnob(i, delta)
+        case .renameCell(let i):
+            renameCursor = i
+            turnKnob(2, delta)
+        case .copyBox: turnKnob(3, delta)
+        default: break
+        }
+    }
+
+    // The preset list behind a click on the voice name, grouped by bank.
+    func presetMenu() -> NSMenu {
+        let menu = NSMenu()
+        let current = preset
+        for bank in 0..<4 {
+            let sub = NSMenu()
+            for i in bank * 32..<bank * 32 + 32 {
+                let item = ClosureMenuItem(title: String(format: "%03d  %@", i + 1, Engine.presetName(i))) { [weak self] in
+                    self?.selectPreset(i)
+                }
+                item.state = i == current ? .on : .off
+                sub.addItem(item)
+            }
+            let head = NSMenuItem(title: "Bank \(["A", "B", "C", "D"][bank])", action: nil, keyEquivalent: "")
+            head.submenu = sub
+            head.state = current / 32 == bank ? .mixed : .off
+            menu.addItem(head)
+        }
+        return menu
+    }
+}
+
+final class ClosureMenuItem: NSMenuItem {
+    private let handler: () -> Void
+    init(title: String, handler: @escaping () -> Void) {
+        self.handler = handler
+        super.init(title: title, action: #selector(run), keyEquivalent: "")
+        target = self
+    }
+    required init(coder: NSCoder) { fatalError("not used") }
+    @objc private func run() { handler() }
 }

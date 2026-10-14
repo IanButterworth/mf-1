@@ -277,3 +277,86 @@ struct KeyCap: View {
         .frame(width: size.width, height: size.height)
     }
 }
+
+// ------------------------------------------------------------------ screen input
+
+// Mouse input on the screen. Clicks act on what is under the pointer; a
+// vertical drag or the scroll wheel turns it like a knob. A plain click on
+// the voice name opens the preset menu, a drag on it scrolls presets.
+final class ScreenInputView: NSView {
+    var model: DeviceModel?
+    private var target: ScreenTarget = .none
+    private var lastY: CGFloat = 0
+    private var accum: CGFloat = 0
+    private var scrollAccum: CGFloat = 0
+    private var dragged = false
+
+    override var isFlipped: Bool { true }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    private func screenPoint(_ e: NSEvent) -> CGPoint {
+        let p = convert(e.locationInWindow, from: nil)
+        return CGPoint(x: p.x / bounds.width * 240, y: p.y / bounds.height * 240)
+    }
+
+    override func mouseDown(with e: NSEvent) {
+        guard let model else { return }
+        target = model.screenTarget(at: screenPoint(e))
+        lastY = e.locationInWindow.y
+        accum = 0
+        dragged = false
+    }
+
+    override func mouseDragged(with e: NSEvent) {
+        guard let model else { return }
+        accum += e.locationInWindow.y - lastY
+        lastY = e.locationInWindow.y
+        let step: CGFloat = e.modifierFlags.contains(.option) ? 12 : 5
+        let detents = Int(accum / step)
+        if detents != 0 {
+            accum -= CGFloat(detents) * step
+            dragged = true
+            model.screenTurn(target, detents)
+        }
+    }
+
+    override func mouseUp(with e: NSEvent) {
+        guard let model, !dragged else { return }
+        if target == .title {
+            model.presetMenu().popUp(positioning: nil, at: convert(e.locationInWindow, from: nil), in: self)
+        } else {
+            model.screenClick(target, back: e.modifierFlags.contains(.shift), double: e.clickCount >= 2)
+        }
+    }
+
+    override func rightMouseDown(with e: NSEvent) {
+        guard let model else { return }
+        let t = model.screenTarget(at: screenPoint(e))
+        if t == .title {
+            model.presetMenu().popUp(positioning: nil, at: convert(e.locationInWindow, from: nil), in: self)
+        } else {
+            model.screenClick(t, back: true, double: false)
+        }
+    }
+
+    override func scrollWheel(with e: NSEvent) {
+        guard let model else { return }
+        let d = e.hasPreciseScrollingDeltas ? e.scrollingDeltaY / 8 : e.scrollingDeltaY
+        scrollAccum += d
+        let detents = Int(scrollAccum)
+        if detents != 0 {
+            scrollAccum -= CGFloat(detents)
+            model.screenTurn(model.screenTarget(at: screenPoint(e)), detents)
+        }
+    }
+}
+
+struct ScreenInput: NSViewRepresentable {
+    let model: DeviceModel
+    func makeNSView(context: Context) -> ScreenInputView {
+        let v = ScreenInputView()
+        v.model = model
+        return v
+    }
+    func updateNSView(_ v: ScreenInputView, context: Context) { v.model = model }
+}

@@ -109,6 +109,9 @@ struct PanelView: View {
             Ticking(clock: LedClock.screen) { ScreenView(model: model, frame: LedClock.screen.frame) }
                 .frame(width: 28.4 * s, height: 28.4 * s)
                 .clipShape(RoundedRectangle(cornerRadius: 0.6 * s))
+            if !Snapshot.active {
+                ScreenInput(model: model).frame(width: 28.4 * s, height: 28.4 * s)
+            }
             // Glass sheen.
             RoundedRectangle(cornerRadius: 4.2 * s)
                 .fill(LinearGradient(colors: [.white.opacity(0.07), .clear, .clear], startPoint: .topLeading, endPoint: .bottomTrailing))
