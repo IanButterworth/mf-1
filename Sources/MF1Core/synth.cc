@@ -712,6 +712,7 @@ void Synth::render(float* out, int frames) {
       for (int i = 0; i < N; i++) block_[i] = acc_[i] * (1.f / (float)(1 << 24));
       fxChain_.process(block_, N);
       bool q = g_.fm1Quirks;
+      uint32_t sp = scopePos.load(std::memory_order_relaxed);
       for (int i = 0; i < N; i++) {
         float x = block_[i];
         if (q) {
@@ -724,13 +725,13 @@ void Synth::render(float* out, int frames) {
           lpState_ += lpCoef_ * (hp - lpState_);
           x = lpState_;
         }
-        x *= vol;
-        x = std::max(-1.f, std::min(1.f, x));
+        // The scope and peak are taken before MASTER, which on the
+        // hardware is an analog pot after the digital signal path.
+        scope[(sp + i) & (kScopeSize - 1)] = x;
         pk = std::max(pk, std::fabs(x));
-        block_[i] = x;
+        x *= vol;
+        block_[i] = std::max(-1.f, std::min(1.f, x));
       }
-      uint32_t sp = scopePos.load(std::memory_order_relaxed);
-      for (int i = 0; i < N; i++) scope[(sp + i) & (kScopeSize - 1)] = block_[i];
       scopePos.store(sp + N, std::memory_order_release);
       blockPos_ = 0;
     }

@@ -442,6 +442,18 @@ final class DeviceModel: ObservableObject {
         objectWillChange.send()
     }
 
+    // Choosing a patch from the menu, like turning PRESETS straight to it.
+    // PRESETS does nothing while SEQ is on, since each pattern binds a voice.
+    func selectPreset(_ index: Int) {
+        guard !seqOn else {
+            flash("Disable SEQ first")
+            return
+        }
+        mf1_load_preset(Int32(index))
+        show(.presets, for: 1.2)
+        objectWillChange.send()
+    }
+
     func turnAlgorithm(_ delta: Int) {
         guard delta != 0 else { return }
         if !octHeld.isEmpty {
@@ -697,6 +709,11 @@ final class DeviceModel: ObservableObject {
         tick &+= 1
         // Redraw LEDs only when one changes, and the screen only while the
         // scope shows a signal or a blink flips, so most frames cost nothing.
+        PatchList.shared.refresh()
+        if DeviceModel.logLatency && tick % 60 == 0 {
+            FileHandle.standardError.write("scope fps \(ScreenView.drawCount)\n".data(using: .utf8)!)
+            ScreenView.drawCount = 0
+        }
         let sig = ledSignature()
         if sig != lastLedSignature {
             lastLedSignature = sig
@@ -794,5 +811,25 @@ extension Param {
         var c = self
         f(&c)
         return c
+    }
+}
+
+// Patch names and the current patch for the Patches menu. Published only
+// when they change, so the menu does not rebuild on every frame.
+final class PatchList: ObservableObject {
+    static let shared = PatchList()
+    @Published private(set) var names: [String] = []
+    @Published private(set) var current = 0
+    private var generation: UInt32 = .max
+
+    func refresh() {
+        let g = mf1_generation()
+        let c = Int(mf1_current_preset())
+        if g != generation || names.isEmpty {
+            generation = g
+            let n = (0..<128).map { Engine.presetName($0) }
+            if n != names { names = n }
+        }
+        if c != current { current = c }
     }
 }

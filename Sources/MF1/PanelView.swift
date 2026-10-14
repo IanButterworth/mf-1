@@ -106,7 +106,7 @@ struct PanelView: View {
                 .fill(Color(hex: 0x0b0d0d))
                 .frame(width: 38.1 * s, height: 38.1 * s)
                 .shadow(color: .black.opacity(0.5), radius: 0.6 * s, y: 0.4 * s)
-            Ticking(clock: LedClock.screen) { ScreenView(model: model) }
+            Ticking(clock: LedClock.screen) { ScreenView(model: model, frame: LedClock.screen.frame) }
                 .frame(width: 28.4 * s, height: 28.4 * s)
                 .clipShape(RoundedRectangle(cornerRadius: 0.6 * s))
             // Glass sheen.

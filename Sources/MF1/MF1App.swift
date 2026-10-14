@@ -44,6 +44,9 @@ struct MF1App: App {
                     .keyboardShortcut("f", modifiers: [.command, .control])
                     .onChange(of: frameless) { _, v in delegate.setFrameless(v) }
             }
+            CommandMenu("Patches") {
+                PatchMenu(model: model)
+            }
             CommandMenu("Device") {
                 Picker("Finish", selection: $finishName) {
                     ForEach(Finish.all, id: \.name) { Text($0.name).tag($0.name) }
@@ -337,4 +340,27 @@ struct WindowDragArea: NSViewRepresentable {
     }
     func makeNSView(context: Context) -> NSView { DragView() }
     func updateNSView(_ view: NSView, context: Context) {}
+}
+
+struct PatchMenu: View {
+    let model: DeviceModel
+    @ObservedObject private var list = PatchList.shared
+
+    var body: some View {
+        Button("Next Patch") { model.turnPresets(1) }
+            .keyboardShortcut(.rightArrow, modifiers: .command)
+        Button("Previous Patch") { model.turnPresets(-1) }
+            .keyboardShortcut(.leftArrow, modifiers: .command)
+        Divider()
+        ForEach(0..<4) { bank in
+            Menu("Bank \(["A", "B", "C", "D"][bank])") {
+                ForEach(bank * 32..<bank * 32 + 32, id: \.self) { i in
+                    let name = i < list.names.count ? list.names[i] : ""
+                    Toggle(String(format: "%03d  %@", i + 1, name), isOn: Binding(
+                        get: { list.current == i },
+                        set: { _ in model.selectPreset(i) }))
+                }
+            }
+        }
+    }
 }

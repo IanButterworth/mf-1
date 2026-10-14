@@ -4,6 +4,9 @@ import SwiftUI
 // The 1.54" 240x240 TFT. Everything is drawn in screen pixels and scaled.
 struct ScreenView: View {
     @ObservedObject var model: DeviceModel
+    // Changes on every screen frame. Without a changing input, SwiftUI
+    // would skip redrawing the scope between model changes.
+    var frame = 0
 
     static let bgTop = Color(red: 0.69, green: 0.84, blue: 0.90)
     static let bgBottom = Color(red: 0.58, green: 0.77, blue: 0.86)
@@ -102,7 +105,10 @@ struct ScreenView: View {
 
     // ---------------------------------------------------------------- pages
 
+    static var drawCount = 0
+
     private func drawScope(_ ctx: inout GraphicsContext) {
+        Self.drawCount += 1
         var samples = [Float](repeating: 0, count: 1024)
         mf1_scope(&samples, 1024)
         // Start at a rising zero crossing so a steady tone stands still.
