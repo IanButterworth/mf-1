@@ -1,9 +1,13 @@
 #!/bin/sh
 # Builds MF-1.app in ./build from the Swift package.
+# UNIVERSAL=1 builds for both Apple silicon and Intel, as for releases.
 set -e
 cd "$(dirname "$0")/.."
-swift build -c release --product MF1
-BIN=$(swift build -c release --show-bin-path)
+VERSION=$(cat VERSION)
+ARCHS=""
+[ "${UNIVERSAL:-0}" = 1 ] && ARCHS="--arch arm64 --arch x86_64"
+swift build -c release $ARCHS --product MF1
+BIN=$(swift build -c release $ARCHS --show-bin-path)
 APP=build/MF-1.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -20,8 +24,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
   <key>CFBundleIdentifier</key><string>org.mf1.synth</string>
   <key>CFBundleExecutable</key><string>MF-1</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
-  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>VERSION_PLACEHOLDER</string>
+  <key>CFBundleVersion</key><string>VERSION_PLACEHOLDER</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>NSHighResolutionCapable</key><true/>
@@ -37,5 +41,6 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+sed -i '' "s/VERSION_PLACEHOLDER/$VERSION/g" "$APP/Contents/Info.plist"
 codesign --force --sign - "$APP" >/dev/null
 echo "built $APP"

@@ -4,6 +4,14 @@ A native macOS emulator of the M-VAVE FM-1 pocket FM synthesizer: the same panel
 engine and MIDI/SysEx behaviour, so patches, librarians and workflows made for the FM-1 work
 with it.
 
+## Install
+
+Download `MF-1-<version>.dmg` from the GitHub releases, open it and drag MF-1 to Applications.
+The app runs on Apple silicon and Intel Macs with macOS 14 or later.
+
+The app is ad-hoc signed, not notarised. On first launch, right-click MF-1 in Applications and
+choose Open, then confirm. Alternatively, run `xattr -dr com.apple.quarantine /Applications/MF-1.app`.
+
 ## Build and run
 
 Requires macOS 14+ and Xcode command line tools (Swift 5.9+).
@@ -11,6 +19,12 @@ Requires macOS 14+ and Xcode command line tools (Swift 5.9+).
 ```sh
 scripts/build-app.sh        # builds build/MF-1.app
 open build/MF-1.app
+```
+
+A release DMG (universal binary, version from `VERSION`):
+
+```sh
+scripts/make-dmg.sh         # builds build/MF-1-<version>.dmg
 ```
 
 Headless checks and a benchmark:
