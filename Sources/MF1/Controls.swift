@@ -63,17 +63,32 @@ final class KnobInputView: NSView {
     private var lastY: CGFloat = 0
     private var dragAccum: CGFloat = 0
     private var scrollAccum: CGFloat = 0
+    // Hides and unhides are counted, so each hide is undone exactly once,
+    // even when the mouse-up is lost.
+    private static var cursorHidden = false
+
+    static func showCursor() {
+        guard cursorHidden else { return }
+        cursorHidden = false
+        NSCursor.unhide()
+    }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func viewDidMoveToWindow() {
+        if window == nil { Self.showCursor() }
+    }
 
     override func mouseDown(with event: NSEvent) {
         lastY = event.locationInWindow.y
         dragAccum = 0
+        Self.showCursor()
         NSCursor.hide()
+        Self.cursorHidden = true
     }
 
     override func mouseUp(with event: NSEvent) {
-        NSCursor.unhide()
+        Self.showCursor()
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -126,6 +141,8 @@ struct KnobInput: NSViewRepresentable {
 // ------------------------------------------------------------------ knob
 
 struct KnobView: View {
+    var name: String
+    var value: String? = nil
     var diameter: CGFloat
     var angle: Double  // radians, for the drawn rotation
     var pointer: Bool  // MASTER has a white dot
@@ -170,6 +187,16 @@ struct KnobView: View {
             if !Snapshot.active {
                 KnobInput(onTurn: onTurn, onAbsolute: onAbsolute)
                     .frame(width: diameter * 1.3, height: diameter * 1.3)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(name)
+        .accessibilityValue(value ?? "")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: onTurn(1)
+            case .decrement: onTurn(-1)
+            @unknown default: break
             }
         }
     }
@@ -228,6 +255,15 @@ struct PanelButton: View {
                 if onLongPress != nil && !longFired { onPress() }
                 onRelease()
             })
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label == "PLAY/STOP" ? "PLAY STOP" : label)
+        .accessibilityValue(lit != nil ? "lit" : "")
+        .accessibilityAddTraits(.isButton)
+        // A screen reader cannot hold a button, so one with a long press does that action.
+        .accessibilityAction {
+            if let lp = onLongPress { lp() } else { onPress() }
+            onRelease()
+        }
     }
 
     @ViewBuilder private var legend: some View {
@@ -364,7 +400,7 @@ final class ScreenInputView: NSView {
         if target == .title {
             model.presetMenu().popUp(positioning: nil, at: convert(e.locationInWindow, from: nil), in: self)
         } else {
-            model.screenClick(target, back: e.modifierFlags.contains(.shift), double: e.clickCount >= 2)
+            model.screenClick(target, back: e.modifierFlags.contains(.shift), clicks: e.clickCount)
         }
     }
 
@@ -374,7 +410,7 @@ final class ScreenInputView: NSView {
         if t == .title {
             model.presetMenu().popUp(positioning: nil, at: convert(e.locationInWindow, from: nil), in: self)
         } else {
-            model.screenClick(t, back: true, double: false)
+            model.screenClick(t, back: true, clicks: 1)
         }
     }
 

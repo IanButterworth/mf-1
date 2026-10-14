@@ -1,4 +1,5 @@
 import AppKit
+import CoreAudio
 import CoreText
 import Foundation
 import MF1Core
@@ -114,5 +115,30 @@ enum Engine {
         let a = NSAlert()
         a.messageText = text
         a.runModal()
+    }
+}
+
+// The output device list, kept current as devices are plugged in or removed.
+final class AudioOutputs: ObservableObject {
+    static let shared = AudioOutputs()
+    struct Device: Equatable {
+        var name: String
+        var uid: String
+    }
+    @Published private(set) var devices: [Device] = []
+
+    private init() {
+        reload()
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
+                                                 mScope: kAudioObjectPropertyScopeGlobal,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, .main) { [weak self] _, _ in
+            self?.reload()
+        }
+    }
+
+    private func reload() {
+        let list = Engine.outputs().map { Device(name: $0.name, uid: $0.uid) }
+        if list != devices { devices = list }
     }
 }
