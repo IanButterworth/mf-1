@@ -18,7 +18,7 @@ enum Engine {
     }
 
     static func start() {
-        _ = mf1_start(stateDirectory.path, portName)
+        _ = mf1_start(stateDirectory.path, portName, UserDefaults.standard.string(forKey: "outputUID") ?? "")
         if mf1_needs_factory() { loadFactoryBanks() }
     }
 
@@ -39,6 +39,15 @@ enum Engine {
         else { return }
         for f in files where f.pathExtension == "ttf" {
             CTFontManagerRegisterFontsForURL(f as CFURL, .process, nil)
+        }
+    }
+
+    // Output devices as (name, UID).
+    static func outputs() -> [(name: String, uid: String)] {
+        (0..<Int(mf1_output_count())).map { i in
+            var name = [CChar](repeating: 0, count: 256), uid = [CChar](repeating: 0, count: 256)
+            mf1_output_info(Int32(i), &name, &uid)
+            return (String(cString: name), String(cString: uid))
         }
     }
 

@@ -88,6 +88,7 @@ struct Command {
     SeqEnable, SetPattern, SelectPattern, Play, Stop, ClockTick, ClockStart, ClockStop,
   } type;
   int a = 0, b = 0, c = 0;
+  uint64_t stamp = 0;  // mach_absolute_time when queued
   union {
     Preset preset;
     GlobalSettings globals;
@@ -126,6 +127,8 @@ class Synth {
   std::atomic<int> activeVoices{0};
   std::atomic<float> cpuLoad{0};
   std::atomic<float> peak{0};
+  // Time the last note-on waited in the queue before the audio thread took it.
+  std::atomic<uint64_t> lastNoteQueueNs{0};
   static constexpr int kScopeSize = 4096;
   float scope[kScopeSize] = {};
   std::atomic<uint32_t> scopePos{0};

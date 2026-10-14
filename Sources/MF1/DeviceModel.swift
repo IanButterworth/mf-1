@@ -59,12 +59,27 @@ final class DeviceModel: ObservableObject {
     @Published var resetBank = 0
     @Published var octHeld: Set<Int> = []
     @Published var saving = false
-    @Published var tick = 0  // drives LED blinking and redraws
+    // Drives LED blinking. Not published: LedClock redraws only the LEDs.
+    var tick = 0
 
     private var pillTimer: Timer?
     private var popupTimer: Timer?
     private var heldKeys: [Int: Int] = [:]  // key index -> note sent
     private var lastGeneration: UInt32 = 0
+    private var lastLedSignature = 0
+    private var scopeWasLive = false
+
+    private static let ledButtons = ["FX", "ENV", "LFO", "EDIT", "GLO", "HOME", "SEL", "SAVE", "ARP", "SEQ",
+                                     "PLAY", "REC", "OCT-", "OCT+"]
+
+    private func ledSignature() -> Int {
+        var h = Hasher()
+        for b in Self.ledButtons { h.combine(buttonLit(b).map { "\($0)" }) }
+        var lo: UInt64 = 0, hi: UInt64 = 0
+        mf1_sounding(&lo, &hi)
+        for k in 0..<27 { h.combine(keyLed(k, sounding: (lo, hi))) }
+        return h.finalize()
+    }
     private var transposeTouched = false
 
     // ---------------------------------------------------------------- state
@@ -578,7 +593,9 @@ final class DeviceModel: ObservableObject {
         let note = noteFor(key: k)
         guard (0...127).contains(note) else { return }
         heldKeys[k] = note
+        let mainWait = NSApp.currentEvent.map { ProcessInfo.processInfo.systemUptime - $0.timestamp } ?? -1
         mf1_key_down(Int32(note))
+        if DeviceModel.logLatency { DeviceModel.reportLatency(mainWait) }
     }
 
     func keyUp(_ k: Int) {
@@ -590,6 +607,21 @@ final class DeviceModel: ObservableObject {
     }
 
     func isHeld(_ k: Int) -> Bool { heldKeys[k] != nil }
+
+    // MF1_LATENCY_LOG=1 prints where key-to-sound time goes.
+    static let logLatency = ProcessInfo.processInfo.environment["MF1_LATENCY_LOG"] != nil
+
+    static func reportLatency(_ mainWait: Double) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            var l = [Double](repeating: 0, count: 6)
+            mf1_latency(&l)
+            let ms = { (frames: Double) in frames / l[4] * 1000 }
+            let out = ms(l[0] + l[1] + l[2] + l[3])
+            FileHandle.standardError.write(String(
+                format: "event->engine %.2f ms | queue %.2f ms | output: buffer %.0f + device %.0f + safety %.0f + stream %.0f frames = %.2f ms @ %.0f Hz\n",
+                mainWait * 1000, l[5], l[0], l[1], l[2], l[3], out, l[4]).data(using: .utf8)!)
+        }
+    }
 
     func releaseAllKeys() {
         for (_, n) in heldKeys { mf1_key_up(Int32(n)) }
@@ -663,6 +695,17 @@ final class DeviceModel: ObservableObject {
 
     func poll() {
         tick &+= 1
+        // Redraw LEDs only when one changes, and the screen only while the
+        // scope shows a signal or a blink flips, so most frames cost nothing.
+        let sig = ledSignature()
+        if sig != lastLedSignature {
+            lastLedSignature = sig
+            LedClock.shared.frame = tick
+        }
+        let scopeLive = mode == .home && popup == nil && mf1_peak() > 0.0002
+        let fxBlink = mode == .fx && tick % 20 == 0
+        if scopeLive || scopeWasLive || fxBlink { LedClock.screen.frame = tick }
+        scopeWasLive = scopeLive
         let g = mf1_generation()
         if g != lastGeneration {
             lastGeneration = g

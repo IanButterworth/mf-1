@@ -436,6 +436,14 @@ void Synth::advanceClock(int frames) {
 void Synth::handle(const Command& c) {
   switch (c.type) {
     case Command::NoteOn:
+      if (c.stamp) {
+        static const double nsPerTick = [] {
+          mach_timebase_info_data_t t;
+          mach_timebase_info(&t);
+          return (double)t.numer / t.denom;
+        }();
+        lastNoteQueueNs.store((uint64_t)((mach_absolute_time() - c.stamp) * nsPerTick), std::memory_order_relaxed);
+      }
       if (c.b == 0)
         noteOff(c.a, c.c != 0);
       else

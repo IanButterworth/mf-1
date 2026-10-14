@@ -9,8 +9,14 @@
 extern "C" {
 #endif
 
-// Starts audio and MIDI. stateDir holds the saved "flash" contents.
-bool mf1_start(const char* stateDir, const char* midiPortName);
+// Starts audio and MIDI. stateDir holds the saved "flash" contents. An
+// empty outputUID follows the system default output device.
+bool mf1_start(const char* stateDir, const char* midiPortName, const char* outputUID);
+// Output devices: count (refreshes the list), then name and UID by index.
+int mf1_output_count(void);
+void mf1_output_info(int index, char name[256], char uid[256]);
+// Moves audio to another device; an empty UID follows the system default.
+void mf1_set_output(const char* uid);
 void mf1_stop(void);
 // True on a fresh state, before any factory banks were imported.
 bool mf1_needs_factory(void);
@@ -126,6 +132,9 @@ uint32_t mf1_generation(void);
 // Short message for a popup from an external event, empty if none.
 void mf1_take_message(char out[64]);
 double mf1_sample_rate(void);
+// Latency report: IO buffer, device, safety offset and stream latency in
+// frames, the sample rate, and the last note-on's queue wait in ms.
+void mf1_latency(double out[6]);
 const char* mf1_midi_port_name(void);
 
 // ---- offline rendering, for tests and benchmarks; no audio device.

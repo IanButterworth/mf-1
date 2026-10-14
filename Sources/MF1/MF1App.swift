@@ -12,6 +12,7 @@ struct MF1App: App {
     @AppStorage("finish") private var finishName = "Black"
     @AppStorage("quirks") private var quirks = true
     @AppStorage("frameless") private var frameless = true
+    @AppStorage("outputUID") private var outputUID = ""
 
     // Fonts must be registered before the first view is drawn, or SwiftUI
     // keeps the fallback font for views it does not redraw.
@@ -47,6 +48,13 @@ struct MF1App: App {
                 Picker("Finish", selection: $finishName) {
                     ForEach(Finish.all, id: \.name) { Text($0.name).tag($0.name) }
                 }
+                // Bluetooth outputs add over 100 ms of delay; wired, USB or
+                // built-in outputs keep key-to-sound time to a few ms.
+                Picker("Audio Output", selection: $outputUID) {
+                    Text("System Default").tag("")
+                    ForEach(Engine.outputs(), id: \.uid) { Text($0.name).tag($0.uid) }
+                }
+                .onChange(of: outputUID) { _, v in mf1_set_output(v) }
                 Toggle("FM-1 V15 Hardware Behaviour", isOn: $quirks)
                     .onChange(of: quirks) { _, v in mf1_global_set(Int32(MF1_G_QUIRKS), v ? 1 : 0) }
                 Divider()

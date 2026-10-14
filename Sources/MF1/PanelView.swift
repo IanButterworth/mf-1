@@ -45,36 +45,7 @@ struct PanelView: View {
     // ---------------------------------------------------------------- case
 
     private func caseShape(_ s: CGFloat) -> some View {
-        ZStack {
-            // Frameless windows get the system shadow around the case shape;
-            // a painted one would be cut off by the window edge as a dark line.
-            if !frameless {
-                RoundedRectangle(cornerRadius: 9 * s)
-                    .fill(Color.black.opacity(0.5))
-                    .offset(y: 1.2 * s)
-                    .blur(radius: 1.5 * s)
-            }
-            RoundedRectangle(cornerRadius: 9 * s)
-                .fill(LinearGradient(colors: [finish.caseTop, finish.caseBottom], startPoint: .top, endPoint: .bottom))
-            if !Snapshot.active {
-                WindowDragArea().clipShape(RoundedRectangle(cornerRadius: 9 * s))
-            }
-            RoundedRectangle(cornerRadius: 9 * s)
-                .stroke(LinearGradient(colors: [.white.opacity(0.18), .black.opacity(0.2)], startPoint: .top, endPoint: .bottom),
-                        lineWidth: 0.5 * s)
-            // Faint grain, so large flat areas do not look like plastic film.
-            Canvas { ctx, size in
-                var rng = SystemRandomNumberGenerator()
-                for _ in 0..<1400 {
-                    let x = CGFloat.random(in: 0..<size.width, using: &rng)
-                    let y = CGFloat.random(in: 0..<size.height, using: &rng)
-                    ctx.fill(Path(CGRect(x: x, y: y, width: 0.8, height: 0.8)), with: .color(.white.opacity(0.025)))
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 9 * s))
-            .allowsHitTesting(false)
-        }
-        .frame(width: Self.width * s, height: Self.height * s)
+        CaseView(scale: s, finish: finish, frameless: frameless).equatable()
     }
 
     private func label(_ text: String, _ x: CGFloat, _ y: CGFloat, _ s: CGFloat) -> some View {
@@ -135,7 +106,7 @@ struct PanelView: View {
                 .fill(Color(hex: 0x0b0d0d))
                 .frame(width: 38.1 * s, height: 38.1 * s)
                 .shadow(color: .black.opacity(0.5), radius: 0.6 * s, y: 0.4 * s)
-            ScreenView(model: model)
+            Ticking(clock: LedClock.screen) { ScreenView(model: model) }
                 .frame(width: 28.4 * s, height: 28.4 * s)
                 .clipShape(RoundedRectangle(cornerRadius: 0.6 * s))
             // Glass sheen.
@@ -156,14 +127,16 @@ struct PanelView: View {
                 .overlay(RoundedRectangle(cornerRadius: 1.8 * s).stroke(Color.black.opacity(0.5), lineWidth: 0.4 * s))
                 .frame(width: 26 * s, height: 7.9 * s)
                 .position(at(21.95, 44.6, s))
-            PanelButton(label: "OCT-", size: CGSize(width: 10.6 * s, height: 5.8 * s), finish: finish,
-                        lit: model.buttonLit("OCT-"), fontSize: 1.9 * s,
-                        onPress: { model.octDown(-1) }, onRelease: { model.octUp(-1) })
-                .position(at(15.8, 44.6, s))
-            PanelButton(label: "OCT+", size: CGSize(width: 10.6 * s, height: 5.8 * s), finish: finish,
-                        lit: model.buttonLit("OCT+"), fontSize: 1.9 * s,
-                        onPress: { model.octDown(1) }, onRelease: { model.octUp(1) })
-                .position(at(28.1, 44.6, s))
+            Ticking {
+                PanelButton(label: "OCT-", size: CGSize(width: 10.6 * s, height: 5.8 * s), finish: finish,
+                            lit: model.buttonLit("OCT-"), fontSize: 1.9 * s,
+                            onPress: { model.octDown(-1) }, onRelease: { model.octUp(-1) })
+                    .position(at(15.8, 44.6, s))
+                PanelButton(label: "OCT+", size: CGSize(width: 10.6 * s, height: 5.8 * s), finish: finish,
+                            lit: model.buttonLit("OCT+"), fontSize: 1.9 * s,
+                            onPress: { model.octDown(1) }, onRelease: { model.octUp(1) })
+                    .position(at(28.1, 44.6, s))
+            }
         }
     }
 
@@ -178,15 +151,17 @@ struct PanelView: View {
                 .frame(width: 65.2 * s, height: 22.4 * s)
                 .position(at(118.55, 37.8, s))
             Circle().fill(Color.black.opacity(0.7)).frame(width: 0.7 * s).position(at(118.6, 37.8, s))
-            ForEach(0..<2) { r in
-                ForEach(0..<6) { c in
-                    let name = names[r][c]
-                    let key = name == "PLAY/STOP" ? "PLAY" : name
-                    PanelButton(label: name, size: CGSize(width: 8.5 * s, height: 8.5 * s), finish: finish,
-                                lit: model.buttonLit(key), fontSize: 1.95 * s,
-                                onPress: { model.press(key) },
-                                onLongPress: key == "SAVE" ? { model.save() } : nil)
-                        .position(at(xs[c], ys[r], s))
+            Ticking {
+                ForEach(0..<2) { r in
+                    ForEach(0..<6) { c in
+                        let name = names[r][c]
+                        let key = name == "PLAY/STOP" ? "PLAY" : name
+                        PanelButton(label: name, size: CGSize(width: 8.5 * s, height: 8.5 * s), finish: finish,
+                                    lit: model.buttonLit(key), fontSize: 1.95 * s,
+                                    onPress: { model.press(key) },
+                                    onLongPress: key == "SAVE" ? { model.save() } : nil)
+                            .position(at(xs[c], ys[r], s))
+                    }
                 }
             }
         }
@@ -205,6 +180,12 @@ struct PanelView: View {
                       width: Self.upperKeySize.width, height: Self.upperKeySize.height)
     }
 
+    private static func sounding() -> (UInt64, UInt64) {
+        var lo: UInt64 = 0, hi: UInt64 = 0
+        mf1_sounding(&lo, &hi)
+        return (lo, hi)
+    }
+
     private func keyAt(_ p: CGPoint, _ s: CGFloat) -> Int? {
         let mm = CGPoint(x: p.x / s, y: p.y / s)
         for k in 0..<27 where keyRect(k).insetBy(dx: -0.5, dy: -0.5).contains(mm) { return k }
@@ -212,10 +193,7 @@ struct PanelView: View {
     }
 
     private func keybed(_ s: CGFloat) -> some View {
-        var lo: UInt64 = 0, hi: UInt64 = 0
-        mf1_sounding(&lo, &hi)
-        let sounding = (lo, hi)
-        return ZStack(alignment: .topLeading) {
+        ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: 6 * s)
                 .fill(finish.keybed)
                 .overlay(RoundedRectangle(cornerRadius: 6 * s)
@@ -226,12 +204,15 @@ struct PanelView: View {
             ForEach([44.4, 71.5, 108.1, 135.4] as [CGFloat], id: \.self) { x in
                 Circle().fill(Color.black.opacity(0.75)).frame(width: 0.7 * s).position(at(x, 72.4, s))
             }
-            ForEach(0..<27) { k in
-                let r = keyRect(k)
-                KeyCap(size: CGSize(width: r.width * s, height: r.height * s), finish: finish,
-                       led: model.keyLed(k, sounding: sounding), pressed: keysDown.contains(k) || model.isHeld(k),
-                       label: k >= 16 ? Self.upperLabels[k - 16] : nil, labelSize: 1.75 * s)
-                    .position(at(r.midX, r.midY, s))
+            Ticking {
+                let sounding = Self.sounding()
+                ForEach(0..<27) { k in
+                    let r = keyRect(k)
+                    KeyCap(size: CGSize(width: r.width * s, height: r.height * s), finish: finish,
+                           led: model.keyLed(k, sounding: sounding), pressed: keysDown.contains(k) || model.isHeld(k),
+                           label: k >= 16 ? Self.upperLabels[k - 16] : nil, labelSize: 1.75 * s)
+                        .position(at(r.midX, r.midY, s))
+                }
             }
             // One gesture for the whole keybed, so a drag slides across keys.
             Color.clear
@@ -261,5 +242,74 @@ struct PanelView: View {
                         dragKey = nil
                     })
         }
+    }
+}
+
+// The static case artwork. It is equatable so SwiftUI skips it on the
+// 60 Hz LED redraws, which keeps the main thread free for input.
+struct CaseView: View, Equatable {
+    var scale: CGFloat
+    var finish: Finish
+    var frameless: Bool
+
+    static func == (a: CaseView, b: CaseView) -> Bool {
+        a.scale == b.scale && a.finish.name == b.finish.name && a.frameless == b.frameless
+    }
+
+    var body: some View {
+        let s = scale
+        ZStack {
+            // Frameless windows get the system shadow around the case shape;
+            // a painted one would be cut off by the window edge as a dark line.
+            if !frameless {
+                RoundedRectangle(cornerRadius: 9 * s)
+                    .fill(Color.black.opacity(0.5))
+                    .offset(y: 1.2 * s)
+                    .blur(radius: 1.5 * s)
+            }
+            RoundedRectangle(cornerRadius: 9 * s)
+                .fill(LinearGradient(colors: [finish.caseTop, finish.caseBottom], startPoint: .top, endPoint: .bottom))
+            if !Snapshot.active {
+                WindowDragArea().clipShape(RoundedRectangle(cornerRadius: 9 * s))
+            }
+            RoundedRectangle(cornerRadius: 9 * s)
+                .stroke(LinearGradient(colors: [.white.opacity(0.18), .black.opacity(0.2)], startPoint: .top, endPoint: .bottom),
+                        lineWidth: 0.5 * s)
+            // Faint grain, so large flat areas do not look like plastic film.
+            // A fixed seed keeps it from shimmering when it is redrawn.
+            Canvas { ctx, size in
+                var seed: UInt64 = 0x9E3779B97F4A7C15
+                func next() -> CGFloat {
+                    seed = seed &* 6364136223846793005 &+ 1442695040888963407
+                    return CGFloat(seed >> 40) / CGFloat(1 << 24)
+                }
+                for _ in 0..<1400 {
+                    let x = next() * size.width, y = next() * size.height
+                    ctx.fill(Path(CGRect(x: x, y: y, width: 0.8, height: 0.8)), with: .color(.white.opacity(0.025)))
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 9 * s))
+            .allowsHitTesting(false)
+        }
+        .frame(width: PanelView.width * s, height: PanelView.height * s)
+    }
+}
+
+// Drives the LEDs and the screen. Only views wrapped in Ticking redraw on
+// each frame, so the rest of the panel stays idle and input is not held up.
+final class LedClock: ObservableObject {
+    static let shared = LedClock()
+    // The screen has its own clock, as it changes at a different rate.
+    static let screen = LedClock()
+    @Published var frame = 0
+}
+
+struct Ticking<Content: View>: View {
+    @ObservedObject var clock: LedClock = LedClock.shared
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        let _ = clock.frame
+        ZStack(alignment: .topLeading) { content() }
     }
 }

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "MF1Core.h"
+#include <mach/mach_time.h>
 #include "platform_audio.h"
 #include "platform_midi.h"
 #include "synth.h"
@@ -65,6 +66,18 @@ struct Engine {
   char message[64] = {};
 
   std::vector<std::vector<uint8_t>> offlineOut;
+  std::string outputUID;
+
+  bool startAudio() {
+    bool ok = audio.start(
+        [this](float* l, float* r, uint32_t n) {
+          synth.render(l, (int)n);
+          if (r) memcpy(r, l, sizeof(float) * n);
+        },
+        outputUID);
+    audioRunning = ok;
+    return ok;
+  }
   std::thread noteThread;
 
   void midiSend(const uint8_t* d, size_t n) {
@@ -78,7 +91,8 @@ struct Engine {
   // True once the audio unit renders; the queue is only drained then.
   std::atomic<bool> audioRunning{false};
 
-  void send(const Command& c) {
+  void send(Command c) {
+    c.stamp = mach_absolute_time();
     std::lock_guard<std::mutex> g(sendLock);
     // Wait at most about 100 ms for the audio thread to make room, and drop
     // the command if there is no audio thread at all.
@@ -553,7 +567,7 @@ Engine* E() {
 
 // ------------------------------------------------------------------ lifecycle
 
-bool mf1_start(const char* stateDir, const char* portName) {
+bool mf1_start(const char* stateDir, const char* portName, const char* outputUID) {
   Engine* e = E();
   LOCK;
   if (e->started) return true;
@@ -563,11 +577,8 @@ bool mf1_start(const char* stateDir, const char* portName) {
   e->audio.onPrepare([e](double sr) { e->synth.prepare(sr); });
   e->started = true;
   e->pushAll();
-  bool ok = e->audio.start([e](float* l, float* r, uint32_t n) {
-    e->synth.render(l, (int)n);
-    if (r) memcpy(r, l, sizeof(float) * n);
-  });
-  e->audioRunning = ok;
+  e->outputUID = outputUID ? outputUID : "";
+  bool ok = e->startAudio();
   e->midi.start(e->portName, [e](const uint8_t* d, size_t len) { e->handleMidi(d, len); });
   e->running = true;
   e->noteThread = std::thread([e] {
@@ -1201,4 +1212,39 @@ size_t mf1_take_midi_out(uint8_t* out, size_t max) {
   size_t n = std::min(max, msg.size());
   memcpy(out, msg.data(), n);
   return n;
+}
+
+void mf1_latency(double out[6]) {
+  Engine* e = E();
+  auto l = e->audio.latency();
+  double sr = e->audio.sampleRate();
+  out[0] = l.bufferFrames;
+  out[1] = l.deviceFrames;
+  out[2] = l.safetyFrames;
+  out[3] = l.streamFrames;
+  out[4] = sr;
+  out[5] = e->synth.lastNoteQueueNs.load() / 1e6;
+}
+
+static std::vector<AudioOutput::Device> outputs;
+
+int mf1_output_count(void) {
+  outputs = AudioOutput::outputDevices();
+  return (int)outputs.size();
+}
+
+void mf1_output_info(int i, char name[256], char uid[256]) {
+  name[0] = uid[0] = 0;
+  if (i < 0 || i >= (int)outputs.size()) return;
+  snprintf(name, 256, "%s", outputs[i].name.c_str());
+  snprintf(uid, 256, "%s", outputs[i].uid.c_str());
+}
+
+void mf1_set_output(const char* uid) {
+  Engine* e = E();
+  LOCK;
+  e->outputUID = uid ? uid : "";
+  e->audioRunning = false;
+  e->audio.stop();
+  e->startAudio();
 }
