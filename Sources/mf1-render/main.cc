@@ -689,6 +689,31 @@ static void wav(int preset, const char* path, int note) {
   writeWav(path, a);
 }
 
+// Interleaved 16 bit stereo.
+static void writeWavStereo(const char* path, const std::vector<float>& l, const std::vector<float>& r) {
+  FILE* f = fopen(path, "wb");
+  uint32_t dataBytes = (uint32_t)l.size() * 4;
+  uint32_t rate = (uint32_t)kRate;
+  auto w32 = [&](uint32_t v) { fwrite(&v, 4, 1, f); };
+  auto w16 = [&](uint16_t v) { fwrite(&v, 2, 1, f); };
+  fwrite("RIFF", 1, 4, f);
+  w32(36 + dataBytes);
+  fwrite("WAVEfmt ", 1, 8, f);
+  w32(16);
+  w16(1);
+  w16(2);
+  w32(rate);
+  w32(rate * 4);
+  w16(4);
+  w16(16);
+  fwrite("data", 1, 4, f);
+  w32(dataBytes);
+  for (size_t i = 0; i < l.size(); i++)
+    for (float x : {l[i], r[i]}) w16((uint16_t)(int16_t)std::lround(std::max(-1.f, std::min(1.f, x)) * 32767));
+  fclose(f);
+  printf("wrote %s\n", path);
+}
+
 static void writeWav(const char* path, const std::vector<float>& a) {
   FILE* f = fopen(path, "wb");
   uint32_t dataBytes = (uint32_t)a.size() * 2;
@@ -777,6 +802,16 @@ int main(int argc, char** argv) {
   }
   if (mode == "bench") bench();
   if (mode == "song" && argc >= 5) song(atoi(argv[3]) - 1, argv[4], argc > 5 ? atof(argv[5]) : 60);
+  if (mode == "midi-extended" && argc >= 6) {
+    // A stereo render with extended mode on, so a song's width is heard.
+    mf1_global_set(MF1_G_EXTENDED, 1);
+    auto data = readFile(argv[3]);
+    if (!mf1_song_play_midi(data.data(), data.size(), atoi(argv[4]) - 1)) return 1;
+    double seconds = argc > 6 ? atof(argv[6]) : 60;
+    std::vector<float> l((size_t)(kRate * seconds)), r(l.size());
+    for (size_t i = 0; i + 64 <= l.size(); i += 64) mf1_offline_render_stereo(&l[i], &r[i], 64);
+    writeWavStereo(argv[5], l, r);
+  }
   if (mode == "midi" && argc >= 6) midiSong(argv[3], atoi(argv[4]), argv[5], argc > 6 ? atof(argv[6]) : 60);
   if (mode == "songenv" && argc >= 4) songEnvelope(atoi(argv[3]) - 1);
   if (mode == "wav" && argc >= 5) wav(atoi(argv[3]) - 1, argv[4], argc > 5 ? atoi(argv[5]) : 60);

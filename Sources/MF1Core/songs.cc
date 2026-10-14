@@ -63,7 +63,7 @@ Song rightPlace() {
   const uint8_t car[4] = {75, 50, 30, 40}, carL[4] = {99, 97, 95, 0};
   const uint8_t mod[4] = {72, 50, 30, 40}, modL[4] = {77, 77, 77, 0};
   Op o1{{car[0], car[1], car[2], car[3]}, {carL[0], carL[1], carL[2], carL[3]}, 99};
-  Op o2{{mod[0], mod[1], mod[2], mod[3]}, {modL[0], modL[1], modL[2], modL[3]}, 86};
+  Op o2{{mod[0], mod[1], mod[2], mod[3]}, {modL[0], modL[1], modL[2], modL[3]}, 85};
   Op o3 = o1, o4 = o2, o5 = o1, o6 = o2;
   // Detune at its lowest puts the voice about 19 cents flat on FM-1 V15
   // (2.8 cents a step), the tuning of the record; each modulator follows its
@@ -71,7 +71,7 @@ Song rightPlace() {
   o1.detune = o2.detune = 0;
   o3.detune = o4.detune = 1;
   o3.outLevel = 88;
-  o4.outLevel = 93;
+  o4.outLevel = 95;
   o4.coarse = 2;  // at twice the pitch, for the saw's upper harmonics
   // The third pair an octave down, as a sub oscillator for weight.
   o5.detune = o6.detune = 0;
@@ -93,8 +93,8 @@ Song rightPlace() {
   }
   const Op ops[6] = {o1, o2, o3, o4, o5, o6};
   makeVoice(s.voice, ops, 5, 7, "RIGHTPLACE");
-  // A small room. The voice itself is voiced to the record's brightness.
-  s.fx = {{0, 0}, {4, 1}, {5, 0}, {6, 38}, {7, 18}};
+  // A touch of the FM-1's own distortion for grit, and a small room.
+  s.fx = {{0, 0}, {4, 1}, {5, 0}, {6, 38}, {7, 18}, {12, 1}, {13, 13}, {14, 60}, {15, 100}};
 
   // Chords from published analyses: triads with a high C held on top
   // over each root, in a 6 + 4 beat grouping. An arrangement of the chord
