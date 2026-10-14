@@ -117,7 +117,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Engine.start()
         let w = PanelWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 1180 * PanelView.height / PanelView.width),
                             styleMask: [.borderless], backing: .buffered, defer: false)
-        w.contentView = NSHostingView(rootView: ContentView(model: DeviceModel.shared))
+        w.contentView = PanelHostingView(rootView: ContentView(model: DeviceModel.shared))
         w.title = "MF-1"
         w.isMovableByWindowBackground = true
         w.contentAspectRatio = NSSize(width: PanelView.width, height: PanelView.height)
@@ -304,6 +304,12 @@ enum Snapshot {
         }
         exit(0)
     }
+}
+
+// Clicking a key while another app is in front plays it, rather than only
+// bringing the window forward.
+final class PanelHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 // A window that can be borderless and still take keyboard focus.

@@ -35,6 +35,7 @@ struct PanelView: View {
                 buttonGrid(s)
                 keybed(s)
             }
+            .coordinateSpace(name: "panel")
         }
         .aspectRatio(Self.width / Self.height, contentMode: .fit)
     }
@@ -237,10 +238,9 @@ struct PanelView: View {
                 .contentShape(Rectangle())
                 .frame(width: 151.1 * s, height: 34.8 * s)
                 .position(at(80.75, 72.6, s))
-                .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .named("panel"))
                     .onChanged { v in
-                        let p = CGPoint(x: v.location.x + 5.2 * s, y: v.location.y + 55.2 * s)
-                        let k = keyAt(p, s)
+                        let k = keyAt(v.location, s)
                         if k != dragKey {
                             if let old = dragKey {
                                 model.keyUp(old)
