@@ -74,6 +74,7 @@ final class KnobInputView: NSView {
     }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override var mouseDownCanMoveWindow: Bool { false }
 
     override func viewDidMoveToWindow() {
         if window == nil { Self.showCursor() }
@@ -105,6 +106,7 @@ final class KnobInputView: NSView {
         if detents != 0 {
             dragAccum -= CGFloat(detents) * step
             onTurn(detents)
+            Self.tick()
         }
     }
 
@@ -119,7 +121,13 @@ final class KnobInputView: NSView {
         if detents != 0 {
             scrollAccum -= CGFloat(detents)
             onTurn(detents)
+            Self.tick()
         }
+    }
+
+    // A light click on a Force Touch trackpad for each step, like a detent.
+    static func tick() {
+        NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
     }
 }
 
@@ -163,12 +171,15 @@ struct KnobView: View {
                 ctx.fill(Path(ellipseIn: CGRect(origin: .zero, size: size)),
                          with: .radialGradient(Gradient(colors: [Color(hex: 0x3a3a3a), Color(hex: 0x111111)]),
                                                center: c, startRadius: 0, endRadius: r))
-                for i in 0..<36 {
-                    let a = Double(i) / 36 * 2 * .pi + angle
-                    var p = Path()
-                    p.move(to: CGPoint(x: c.x + cos(a) * r * 0.80, y: c.y + sin(a) * r * 0.80))
-                    p.addLine(to: CGPoint(x: c.x + cos(a) * r * 0.98, y: c.y + sin(a) * r * 0.98))
-                    ctx.stroke(p, with: .color(.white.opacity(0.10)), lineWidth: max(0.5, r * 0.05))
+                // Raised bumps, few enough that one step clearly moves them forward, never backward.
+                for i in 0..<8 {
+                    let a = Double(i) / 8 * 2 * .pi + angle
+                    let b = CGPoint(x: c.x + cos(a) * r * 0.88, y: c.y + sin(a) * r * 0.88)
+                    let br = r * 0.08
+                    let bump = CGRect(x: b.x - br, y: b.y - br, width: br * 2, height: br * 2)
+                    ctx.fill(Path(ellipseIn: bump),
+                             with: .linearGradient(Gradient(colors: [Color(hex: 0x666668), Color(hex: 0x262627)]),
+                                                   startPoint: CGPoint(x: b.x, y: bump.minY), endPoint: CGPoint(x: b.x, y: bump.maxY)))
                 }
                 // Cap.
                 let cap = CGRect(x: c.x - r * 0.74, y: c.y - r * 0.74, width: r * 1.48, height: r * 1.48)
@@ -362,6 +373,7 @@ final class ScreenInputView: NSView {
     var model: DeviceModel?
     private var target: ScreenTarget = .none
     private var lastY: CGFloat = 0
+    override var mouseDownCanMoveWindow: Bool { false }
     private var accum: CGFloat = 0
     private var scrollAccum: CGFloat = 0
     private var dragged = false

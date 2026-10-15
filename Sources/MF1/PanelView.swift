@@ -81,7 +81,12 @@ struct PanelView: View {
             KnobView(name: names[0], value: "\(Int(vol))", diameter: d,
                      angle: (vol / 100 - 0.5) * (300.0 / 180.0) * .pi, pointer: true,
                      onTurn: { model.turnMaster(by: Double($0)) },
-                     onAbsolute: { model.turnMaster(by: Double($0) * 0.5) })
+                     onAbsolute: { d in
+                         let before = Int(mf1_global_get(Int32(MF1_G_VOLUME))) / 10
+                         model.turnMaster(by: Double(d) * 0.5)
+                         // The pot turns smoothly, so it clicks only every 10 steps.
+                         if Int(mf1_global_get(Int32(MF1_G_VOLUME))) / 10 != before { KnobInputView.tick() }
+                     })
                 .position(at(positions[0].0, positions[0].1, s))
             ForEach(1..<8) { i in
                 KnobView(name: names[i], diameter: d, angle: knobAngles[i - 1], pointer: false, onTurn: { delta in

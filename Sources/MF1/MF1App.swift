@@ -145,7 +145,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                             styleMask: [.borderless], backing: .buffered, defer: false)
         w.contentView = PanelHostingView(rootView: ContentView(model: DeviceModel.shared))
         w.title = "MF-1"
-        w.isMovableByWindowBackground = true
+        // Only the bare case moves the window, so drags on knobs, keys and sliders never do.
+        w.isMovableByWindowBackground = false
         w.contentAspectRatio = NSSize(width: PanelView.width, height: PanelView.height)
         w.isReleasedWhenClosed = false
         window = w
