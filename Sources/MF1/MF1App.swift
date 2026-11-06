@@ -3,7 +3,6 @@ import MF1Core
 import SwiftUI
 import UniformTypeIdentifiers
 
-@main
 struct MF1App: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     // Not observed here: the model publishes on every LED tick, and observing
@@ -141,13 +140,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Engine.start()
-        let w = PanelWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 1180 * PanelView.height / PanelView.width),
+        let w = PanelWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 1180 * PanelMetrics.height / PanelMetrics.width),
                             styleMask: [.borderless], backing: .buffered, defer: false)
         w.contentView = PanelHostingView(rootView: ContentView(model: DeviceModel.shared))
         w.title = "MF-1"
         // Only the bare case moves the window, so drags on knobs, keys and sliders never do.
         w.isMovableByWindowBackground = false
-        w.contentAspectRatio = NSSize(width: PanelView.width, height: PanelView.height)
+        w.contentAspectRatio = NSSize(width: PanelMetrics.width, height: PanelMetrics.height)
         w.isReleasedWhenClosed = false
         window = w
         setFrameless(UserDefaults.standard.object(forKey: "frameless") as? Bool ?? true)

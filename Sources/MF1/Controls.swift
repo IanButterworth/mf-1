@@ -18,6 +18,11 @@ struct Finish {
     var keyLabel: Color? = nil
     // Unlit LED slits on coloured keys read as dark grooves.
     var slit: Color? = nil
+    // Knob colours: the knurled skirt, the cap, the raised bumps and the dot on MASTER.
+    var knobSkirt: [Color] = [Color(hex: 0x3a3a3a), Color(hex: 0x111111)]
+    var knobCap: [Color] = [Color(hex: 0x3b3b3d), Color(hex: 0x161617)]
+    var knobBump: [Color] = [Color(hex: 0x666668), Color(hex: 0x262627)]
+    var knobDot: Color = .white
 
     static let black = Finish(name: "Black", caseTop: Color(hex: 0x323234), caseBottom: Color(hex: 0x252527),
                               keybed: Color(hex: 0x2b2b2d), tray: Color(hex: 0x29292b),
@@ -45,6 +50,16 @@ struct Finish {
                                    button: Color(hex: 0x74cdc0), legend: Color(hex: 0xffffff), unlitLegend: Color(hex: 0x24443f),
                                    label: Color(hex: 0x3b4655), keyLabel: Color(hex: 0x1f3a36), slit: Color(hex: 0x1d2f2c))
     static let all = [black, purple, orange, blackGreen, coolGray, whiteBlue, whiteGreen]
+
+    // iScream's own finish: Barbie pink, with pale pink silicone keys.
+    static let barbie = Finish(name: "Barbie", caseTop: Color(hex: 0xff86c4), caseBottom: Color(hex: 0xe8409a),
+                               keybed: Color(hex: 0xffd9ec), tray: Color(hex: 0xd22a85),
+                               button: Color(hex: 0xe0408f), legend: Color(hex: 0xffffff), unlitLegend: Color(hex: 0xffc6e0),
+                               label: Color(hex: 0xfff6fb), keyLabel: Color(hex: 0xc2287a), slit: Color(hex: 0xf0aacd),
+                               knobSkirt: [Color(hex: 0xffc9e3), Color(hex: 0xd9338a)],
+                               knobCap: [Color(hex: 0xfff0f8), Color(hex: 0xff8fc8)],
+                               knobBump: [Color(hex: 0xffffff), Color(hex: 0xf09bc8)],
+                               knobDot: Color(hex: 0xd2227f))
 }
 
 extension Color {
@@ -152,10 +167,53 @@ struct KnobView: View {
     var name: String
     var value: String? = nil
     var diameter: CGFloat
+    var finish: Finish = .black
     var angle: Double  // radians, for the drawn rotation
     var pointer: Bool  // MASTER has a white dot
     var onTurn: (Int) -> Void
     var onAbsolute: ((CGFloat) -> Void)? = nil
+
+    // Split out so the drawing closure type-checks quickly.
+    private var face: some View {
+        let skirt = Gradient(colors: finish.knobSkirt)
+        let bumpGradient = Gradient(colors: finish.knobBump)
+        let capGradient = Gradient(colors: finish.knobCap)
+        let dot = finish.knobDot
+        let angle = self.angle
+        let pointer = self.pointer
+        return Canvas { (ctx: inout GraphicsContext, size: CGSize) in
+            let r: CGFloat = size.width / 2
+            let c = CGPoint(x: r, y: r)
+            // Knurled skirt.
+            ctx.fill(Path(ellipseIn: CGRect(origin: .zero, size: size)),
+                     with: .radialGradient(skirt, center: c, startRadius: 0, endRadius: r))
+            // Raised bumps, few enough that one step clearly moves them forward, never backward.
+            for i in 0..<8 {
+                let a: Double = Double(i) / 8.0 * 2.0 * Double.pi + angle
+                let bx: CGFloat = c.x + CGFloat(cos(a)) * r * 0.88
+                let by: CGFloat = c.y + CGFloat(sin(a)) * r * 0.88
+                let br: CGFloat = r * 0.08
+                let bump = CGRect(x: bx - br, y: by - br, width: br * 2, height: br * 2)
+                ctx.fill(Path(ellipseIn: bump),
+                         with: .linearGradient(bumpGradient, startPoint: CGPoint(x: bx, y: bump.minY),
+                                               endPoint: CGPoint(x: bx, y: bump.maxY)))
+            }
+            // Cap.
+            let cap = CGRect(x: c.x - r * 0.74, y: c.y - r * 0.74, width: r * 1.48, height: r * 1.48)
+            ctx.fill(Path(ellipseIn: cap),
+                     with: .linearGradient(capGradient, startPoint: CGPoint(x: c.x, y: cap.minY),
+                                           endPoint: CGPoint(x: c.x, y: cap.maxY)))
+            ctx.stroke(Path(ellipseIn: cap), with: .color(.white.opacity(0.08)), lineWidth: 0.6)
+            if pointer {
+                let a: Double = angle - Double.pi / 2
+                let dx: CGFloat = c.x + CGFloat(cos(a)) * r * 0.52 - r * 0.12
+                let dy: CGFloat = c.y + CGFloat(sin(a)) * r * 0.52 - r * 0.12
+                let d = CGRect(x: dx, y: dy, width: r * 0.24, height: r * 0.24)
+                ctx.fill(Path(ellipseIn: d), with: .color(dot))
+            }
+        }
+            .frame(width: diameter, height: diameter)
+    }
 
     var body: some View {
         ZStack {
@@ -164,37 +222,7 @@ struct KnobView: View {
                 .frame(width: diameter * 1.08, height: diameter * 1.08)
                 .offset(y: diameter * 0.06)
                 .blur(radius: diameter * 0.05)
-            Canvas { ctx, size in
-                let r = size.width / 2
-                let c = CGPoint(x: r, y: r)
-                // Knurled skirt.
-                ctx.fill(Path(ellipseIn: CGRect(origin: .zero, size: size)),
-                         with: .radialGradient(Gradient(colors: [Color(hex: 0x3a3a3a), Color(hex: 0x111111)]),
-                                               center: c, startRadius: 0, endRadius: r))
-                // Raised bumps, few enough that one step clearly moves them forward, never backward.
-                for i in 0..<8 {
-                    let a = Double(i) / 8 * 2 * .pi + angle
-                    let b = CGPoint(x: c.x + cos(a) * r * 0.88, y: c.y + sin(a) * r * 0.88)
-                    let br = r * 0.08
-                    let bump = CGRect(x: b.x - br, y: b.y - br, width: br * 2, height: br * 2)
-                    ctx.fill(Path(ellipseIn: bump),
-                             with: .linearGradient(Gradient(colors: [Color(hex: 0x666668), Color(hex: 0x262627)]),
-                                                   startPoint: CGPoint(x: b.x, y: bump.minY), endPoint: CGPoint(x: b.x, y: bump.maxY)))
-                }
-                // Cap.
-                let cap = CGRect(x: c.x - r * 0.74, y: c.y - r * 0.74, width: r * 1.48, height: r * 1.48)
-                ctx.fill(Path(ellipseIn: cap),
-                         with: .linearGradient(Gradient(colors: [Color(hex: 0x3b3b3d), Color(hex: 0x161617)]),
-                                               startPoint: CGPoint(x: c.x, y: cap.minY), endPoint: CGPoint(x: c.x, y: cap.maxY)))
-                ctx.stroke(Path(ellipseIn: cap), with: .color(.white.opacity(0.08)), lineWidth: 0.6)
-                if pointer {
-                    let a = angle - .pi / 2
-                    let d = CGRect(x: c.x + cos(a) * r * 0.52 - r * 0.12, y: c.y + sin(a) * r * 0.52 - r * 0.12,
-                                   width: r * 0.24, height: r * 0.24)
-                    ctx.fill(Path(ellipseIn: d), with: .color(.white))
-                }
-            }
-            .frame(width: diameter, height: diameter)
+            face
             if !Snapshot.active {
                 KnobInput(onTurn: onTurn, onAbsolute: onAbsolute)
                     .frame(width: diameter * 1.3, height: diameter * 1.3)

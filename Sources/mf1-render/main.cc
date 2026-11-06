@@ -13,6 +13,9 @@
 #include "MF1Core.h"
 
 int engineTests();
+int iscreamTests();
+void iscreamReport(int only, int note, int scoops, bool withToppings);
+void iscreamEnvelope(int flavor, int field, int a, int b, int c);
 
 static const double kRate = 48000;
 static int failures = 0;
@@ -798,7 +801,19 @@ int main(int argc, char** argv) {
   if (mode == "test") {
     int failed = test();
     failed += engineTests();
+    failed += iscreamTests();
     return failed ? 1 : 0;
+  }
+  // iscream-report [flavor 1-based, 0 for all] [note] [scoops] [toppings 0/1]
+  // iscream-env <flavor 1-based> <field> <a> <b> <c>
+  if (mode == "iscream-env" && argc >= 8) {
+    iscreamEnvelope(atoi(argv[3]) - 1, atoi(argv[4]), atoi(argv[5]), atoi(argv[6]), atoi(argv[7]));
+    return 0;
+  }
+  if (mode == "iscream-report") {
+    iscreamReport(argc > 3 ? atoi(argv[3]) - 1 : -1, argc > 4 ? atoi(argv[4]) : 60, argc > 5 ? atoi(argv[5]) : 1,
+                  argc > 6 && atoi(argv[6]) != 0);
+    return 0;
   }
   if (mode == "bench") bench();
   if (mode == "song" && argc >= 5) song(atoi(argv[3]) - 1, argv[4], argc > 5 ? atof(argv[5]) : 60);

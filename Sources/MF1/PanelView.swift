@@ -3,25 +3,23 @@ import SwiftUI
 
 // The front panel, laid out in millimetres from a top-down photo of the
 // unit (161.5 x 96.5 mm) and scaled to the window.
-struct PanelView: View {
-    @ObservedObject var model: DeviceModel
+struct PanelView<M: PanelDriver>: View {
+    @ObservedObject var model: M
     var finish: Finish
     @State private var knobAngles = [Double](repeating: 0, count: 7)
     @AppStorage("frameless") private var frameless = true
     @State private var keysDown: Set<Int> = []
     @State private var dragKey: Int? = nil
 
-    static let width: CGFloat = 161.5
-    static let height: CGFloat = 96.5
-
-    // Key centres (mm). Lower row: 16 keys; upper row: 11 keys.
-    static let lowerX: [CGFloat] = (0..<16).map { 12.5 + 9.14 * CGFloat($0) }
-    static let upperX: [CGFloat] = [16.9, 26.0, 35.0, 53.3, 62.5, 80.8, 89.8, 99.0, 117.3, 126.5, 144.6]
-    static let lowerY: CGFloat = 80.4
-    static let upperY: CGFloat = 65.4
-    static let keySize = CGSize(width: 7.9, height: 14.6)
-    static let upperKeySize = CGSize(width: 7.6, height: 12.6)
-    static let upperLabels = ["OP1", "OP2", "OP3", "OP4", "OP5", "OP6", "PIT", "GLO", "MONO", "POLY", nil]
+    // Generic types cannot hold stored statics, so the measurements live in PanelMetrics.
+    static var width: CGFloat { PanelMetrics.width }
+    static var height: CGFloat { PanelMetrics.height }
+    static var lowerX: [CGFloat] { PanelMetrics.lowerX }
+    static var upperX: [CGFloat] { PanelMetrics.upperX }
+    static var lowerY: CGFloat { PanelMetrics.lowerY }
+    static var upperY: CGFloat { PanelMetrics.upperY }
+    static var keySize: CGSize { PanelMetrics.keySize }
+    static var upperKeySize: CGSize { PanelMetrics.upperKeySize }
 
     var body: some View {
         GeometryReader { geo in
@@ -58,12 +56,13 @@ struct PanelView: View {
 
     private func labels(_ s: CGFloat) -> some View {
         ZStack(alignment: .topLeading) {
-            label("MASTER", 12.9, 7.3, s)
-            label("SELECT", 29.4, 7.3, s)
-            label("PRESETS", 12.9, 24.2, s)
-            label("ALGORITHM", 30.2, 24.2, s)
+            let names = model.labels
+            label(names.master, 12.9, 7.3, s)
+            label(names.select, 29.4, 7.3, s)
+            label(names.presets, 12.9, 24.2, s)
+            label(names.algorithm, 30.2, 24.2, s)
             ForEach(0..<4) { i in
-                label("KNOB\(i + 1)", [91.0, 109.2, 127.3, 145.8][i], 7.3, s)
+                label(names.knobs[i], [91.0, 109.2, 127.3, 145.8][i], 7.3, s)
             }
         }
     }
@@ -78,7 +77,7 @@ struct PanelView: View {
         return ZStack(alignment: .topLeading) {
             // MASTER: a 300 degree pot.
             let vol = Double(mf1_global_get(Int32(MF1_G_VOLUME)))
-            KnobView(name: names[0], value: "\(Int(vol))", diameter: d,
+            KnobView(name: names[0], value: "\(Int(vol))", diameter: d, finish: finish,
                      angle: (vol / 100 - 0.5) * (300.0 / 180.0) * .pi, pointer: true,
                      onTurn: { model.turnMaster(by: Double($0)) },
                      onAbsolute: { d in
@@ -89,7 +88,7 @@ struct PanelView: View {
                      })
                 .position(at(positions[0].0, positions[0].1, s))
             ForEach(1..<8) { i in
-                KnobView(name: names[i], diameter: d, angle: knobAngles[i - 1], pointer: false, onTurn: { delta in
+                KnobView(name: names[i], diameter: d, finish: finish, angle: knobAngles[i - 1], pointer: false, onTurn: { delta in
                     knobAngles[i - 1] += Double(delta) * 0.26
                     switch i {
                     case 1: model.turnSelect(delta)
@@ -111,11 +110,11 @@ struct PanelView: View {
                 .fill(Color(hex: 0x0b0d0d))
                 .frame(width: 38.1 * s, height: 38.1 * s)
                 .shadow(color: .black.opacity(0.5), radius: 0.6 * s, y: 0.4 * s)
-            Ticking(clock: LedClock.screen) { ScreenView(model: model, frame: LedClock.screen.frame) }
+            Ticking(clock: LedClock.screen) { model.screenView(frame: LedClock.screen.frame) }
                 .frame(width: 28.4 * s, height: 28.4 * s)
                 .clipShape(RoundedRectangle(cornerRadius: 0.6 * s))
             if !Snapshot.active {
-                ScreenInput(model: model).frame(width: 28.4 * s, height: 28.4 * s)
+                model.screenInput().frame(width: 28.4 * s, height: 28.4 * s)
             }
             // Glass sheen.
             RoundedRectangle(cornerRadius: 4.2 * s)
@@ -164,7 +163,7 @@ struct PanelView: View {
                     ForEach(0..<6) { c in
                         let name = names[r][c]
                         let key = name == "PLAY/STOP" ? "PLAY" : name
-                        PanelButton(label: name, size: CGSize(width: 8.5 * s, height: 8.5 * s), finish: finish,
+                        PanelButton(label: model.buttonLegend(name), size: CGSize(width: 8.5 * s, height: 8.5 * s), finish: finish,
                                     lit: model.buttonLit(key), fontSize: 1.95 * s,
                                     onPress: { model.press(key) },
                                     onLongPress: key == "SAVE" ? { model.save() } : nil)
@@ -210,12 +209,12 @@ struct PanelView: View {
             Ticking {
                 ForEach(0..<27) { k in
                     let r = keyRect(k)
-                    let label = k >= 16 ? Self.upperLabels[k - 16] : nil
+                    let label = k >= 16 ? model.upperKeyLabel(k - 16) : nil
                     KeyCap(size: CGSize(width: r.width * s, height: r.height * s), finish: finish,
                            led: model.keyLed(k), pressed: keysDown.contains(k) || model.isHeld(k),
                            label: label, labelSize: 1.75 * s)
                         .accessibilityElement(children: .ignore)
-                        .accessibilityLabel("key \(DeviceModel.noteName(model.shownNote(key: k)))\(label.map { " " + $0 } ?? "")")
+                        .accessibilityLabel("key \(noteName(model.shownNote(key: k)))\(label.map { " " + $0 } ?? "")")
                         .accessibilityAddTraits(.isButton)
                         .accessibilityAction {
                             model.keyDown(k)
@@ -255,6 +254,23 @@ struct PanelView: View {
         }
     }
 }
+
+// The panel's measurements in millimetres, from the photo.
+enum PanelMetrics {
+    static let width: CGFloat = 161.5
+    static let height: CGFloat = 96.5
+
+    // Key centres (mm). Lower row: 16 keys; upper row: 11 keys.
+    static let lowerX: [CGFloat] = (0..<16).map { 12.5 + 9.14 * CGFloat($0) }
+    static let upperX: [CGFloat] = [16.9, 26.0, 35.0, 53.3, 62.5, 80.8, 89.8, 99.0, 117.3, 126.5, 144.6]
+    static let lowerY: CGFloat = 80.4
+    static let upperY: CGFloat = 65.4
+    static let keySize = CGSize(width: 7.9, height: 14.6)
+    static let upperKeySize = CGSize(width: 7.6, height: 12.6)
+}
+
+// Yamaha octave numbering, where middle C (MIDI 60) is C3.
+func noteName(_ n: Int) -> String { DeviceModel.noteName(n) }
 
 // The static case artwork. It is equatable so SwiftUI skips it on the
 // 60 Hz LED redraws, which keeps the main thread free for input.
@@ -302,7 +318,7 @@ struct CaseView: View, Equatable {
             .clipShape(RoundedRectangle(cornerRadius: 9 * s))
             .allowsHitTesting(false)
         }
-        .frame(width: PanelView.width * s, height: PanelView.height * s)
+        .frame(width: PanelMetrics.width * s, height: PanelMetrics.height * s)
     }
 }
 

@@ -9,11 +9,18 @@ import UniformTypeIdentifiers
 enum Engine {
     // The virtual MIDI port name contains "FM-1" so the existing web
     // librarians and editors, which match ports by that substring, find it.
-    static let portName = "MF-1 (FM-1 Compatible)"
+    static var portName: String { isIScream ? "iScream (FM-1 Compatible)" : "MF-1 (FM-1 Compatible)" }
+
+    // The same binary is also iScream: when the app is called iScream, or started with --iscream.
+    static let isIScream: Bool = {
+        let name = URL(fileURLWithPath: CommandLine.arguments[0]).lastPathComponent.lowercased()
+        return name == "iscream" || CommandLine.arguments.contains("--iscream")
+            || Bundle.main.bundleIdentifier == "org.mf1.iscream"
+    }()
 
     static var stateDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let dir = base.appendingPathComponent("MF-1", isDirectory: true)
+        let dir = base.appendingPathComponent(isIScream ? "iScream" : "MF-1", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -21,6 +28,12 @@ enum Engine {
     static func start() {
         _ = mf1_start(stateDirectory.path, portName, UserDefaults.standard.string(forKey: "outputUID") ?? "")
         if mf1_needs_factory() { loadFactoryBanks() }
+    }
+
+    // iScream's banks are its flavors, not the factory voices.
+    static func startIScream() {
+        _ = mf1_start(stateDirectory.path, portName, UserDefaults.standard.string(forKey: "outputUID") ?? "")
+        IScreamModel.shared.start()
     }
 
     static func loadFactoryBanks() {

@@ -104,6 +104,15 @@ Hold SAVE to save, as on the hardware. The window is frameless by default: drag 
 the case to move it, and use ⌘W or ⌘Q to close. View › Frameless Window (⌃⌘F) switches to a
 normal window. Help › MF-1 Keyboard and Controls lists the rest.
 
+## iScream
+
+The same engine and panel also run as **iScream**, a small synth made of ice cream: flavors
+are the sounds, the cone is the filter, and the toppings are the effects. There are twelve
+flavors and no menus; the screen draws the sundae you are building. `scripts/build-iscream.sh`
+builds `build/iScream.app`. It has its own settings folder and MIDI port, and uses only what a real
+FM-1 has, so the flavors export as a standard DX7 bank. See `docs/iscream.md`, including what is not
+verified (the sounds were tuned by measurement, not yet on hardware, and it does not run as firmware).
+
 ## Known differences
 
 - Effects: M-VAVE has not published the effect DSP, so the six effects are generic designs.

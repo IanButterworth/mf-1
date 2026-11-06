@@ -109,8 +109,15 @@ Licences matter when reading community code:
   the 240x240 screen (`ScreenView`, with `ScreenLayout` shared by drawing and clicks); the device
   state machine (`DeviceModel`); the app, window and menus; `Engine.swift` has the Swift helpers,
   the song library and the audio output list.
-- `Sources/mf1-render`: headless checks (`main.cc`, `tests_engine.cc`), benchmark and WAV
-  rendering through the offline C API.
+  - `PanelView` is generic over `PanelDriver` (`PanelDriver.swift`): `DeviceModel` drives MF-1,
+    `IScreamModel` drives iScream. Anything new that the panel needs from its model goes on the protocol.
+  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`; `main.swift` picks the front end) is the same
+    binary as MF-1 under another name. Keep MF-1's behaviour unchanged when editing shared panel code,
+    and check both with `--snapshot`.
+- `Sources/IScreamCore` (C++17): iScream's flavors, how a sundae becomes an FM-1 voice and effects. It
+  uses only the public C API and only what a real FM-1 has (see `docs/iscream.md`).
+- `Sources/mf1-render`: headless checks (`main.cc`, `tests_engine.cc`, `iscream_tests.cc`), benchmark
+  and WAV rendering through the offline C API.
 - `docs/research/`: the specs the emulation is built from.
 
 ## Build and test
