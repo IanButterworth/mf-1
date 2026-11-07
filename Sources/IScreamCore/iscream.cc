@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <cmath>
 #include <cstring>
 
 #include "MF1Core.h"
@@ -10,6 +9,9 @@ using namespace iscream;
 namespace {
 
 int clampi(int v, int lo, int hi) { return std::max(lo, std::min(hi, v)); }
+
+// num / den rounded half away from zero, in integers so the firmware's C gives the same voice.
+int roundDiv(int num, int den) { return num >= 0 ? (num + den / 2) / den : -((-num + den / 2) / den); }
 
 // MF1Core's effect numbering, and the order the toppings are stacked in: the cone first, then
 // the effects as a signal would meet them (drive, swirl, chorus, echo, room).
@@ -92,10 +94,10 @@ void iscream_voice(const int32_t sundae[IS_FIELDS], uint8_t v[155]) {
   const int spread = f.baseSpread + scoopSpread(s[IS_SCOOPS]);
   const bool caramel = s[IS_TOP(IS_CARAMEL, 0)] != 0;
   const int caramelAmount = caramel ? s[IS_TOP(IS_CARAMEL, 1)] : 0;
-  const int flat = (int)std::lround(caramelAmount / 100.0 * 3);
-  const int sweetOffset = s[IS_SWEET] < 50 ? (int)std::lround((s[IS_SWEET] - 50) * 0.6)
-                                           : (int)std::lround((s[IS_SWEET] - 50) * 0.24);
-  const int melt = (int)std::lround((s[IS_MELT] - 50) * 0.5);
+  const int flat = roundDiv(caramelAmount * 3, 100);
+  const int sweetOffset =
+      s[IS_SWEET] < 50 ? roundDiv((s[IS_SWEET] - 50) * 6, 10) : roundDiv((s[IS_SWEET] - 50) * 24, 100);
+  const int melt = roundDiv((s[IS_MELT] - 50) * 5, 10);
 
   for (int i = 0; i < 6; i++) {
     const Op& o = f.op[i];
@@ -108,7 +110,7 @@ void iscream_voice(const int32_t sundae[IS_FIELDS], uint8_t v[155]) {
       p[2] = (uint8_t)clampi(o.r[2] - melt, 1, 99);
     }
   }
-  v[139] = (uint8_t)clampi((int)std::lround(s[IS_FIZZ] * 0.35 + caramelAmount * 0.12), 0, 99);
+  v[139] = (uint8_t)clampi(roundDiv(s[IS_FIZZ] * 35 + caramelAmount * 12, 100), 0, 99);
 }
 
 void iscream_apply(const int32_t sundae[IS_FIELDS]) {
