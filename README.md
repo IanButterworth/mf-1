@@ -110,6 +110,8 @@ normal window. Help › MF-1 Keyboard and Controls lists the rest.
 
 ## iScream
 
+![iScream mode: the pink panel with a three-scoop strawberry cone on the screen](docs/images/iscream.jpg)
+
 View › iScream Mode turns MF-1 into **iScream**, a small synth made of ice cream: flavors
 are the sounds, the cone is the filter, and the toppings are the effects. There are twelve
 flavors and no menus; the screen draws the sundae you are building. Switching relaunches the app.
