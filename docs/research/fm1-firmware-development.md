@@ -16,6 +16,29 @@ Research date 2026-11-07. Confidence labels as in `fm1-protocol-and-engine.md`.
   unit then needs the download mode [Felucca issue #320; Dinghy 0.5 README; measured by those projects].
 - Community firmwares expect stock V15 as the starting point and offer it as the way back.
 
+## Factory V15 is not the published V15
+
+A unit that left the factory with V15 runs a different build from M-VAVE's published `FM-1_015.fwsc`
+(699,956 bytes, SHA-256 `db1642b2…`), though both report `FM-1_015`.
+- jvitkauskas/fm1-backup: a double-read full dump of a stock unit (Puya `0x856014`, chip key `0x980F`). Its
+  installed `app.bin` is 580,892 bytes (CRC16 `BD93`); the package's is 581,564 (CRC16 `5D48`). No published
+  package matches it [measured by that project].
+- Our unit (Puya `0x856014`), full flash read 2026-11-07 with fm1-base's `fm1_rescue.py`, read only:
+  - The flash head below `0x4000` equals the package's.
+  - 143 of the 147 sectors in the app area differ from the package.
+  - Decoded with the SFC cipher (chip key `0x980F`, block addresses counted from `0x4000`), both hold the same V15:
+    the same SDK build stamps (`DRIVER ...@20231109-$9aaf4e5`, `UPDATE ...@20230817-$2374938`) and 980 of 995
+    text strings in common. On the unit the code sits `0x2A0` bytes lower, the 672 bytes between the two sizes
+    above. The cipher mixes the block address into its key, so this shift alone makes almost every sector
+    differ. The shift is `0x2A2` in places, so the builds also differ slightly in content [measured].
+- So a return to stock with the package installs a different V15 build than the unit shipped with. Only a full
+  flash backup keeps the factory build. A sector-diff restore rewrites nearly the whole app area, not a few
+  sectors [inferred].
+- Getting there: OCT- and OCT+ held at power-on did not reach the ROM boot from V15. The SysEx key
+  `F0 22 24 35 7D F7` did, sent three times 20 ms apart after an identity query, with the port opened at least
+  0.3 s before the first send (CoreMIDI may drop a message sent just after opening). The key and the sequence
+  are MvaveFM1Unbricker's `softkey` [measured on our unit].
+
 ## Routes to a firmware of your own
 
 | Route | What it gives | Licence | Build host | Notes |
@@ -54,3 +77,5 @@ MF-1 in Faithful mode, not literally like the stock V15 firmware. Where the two 
 - FM1 Open: https://github.com/m-vave/fm1_open
 - setup-fm1-toolchain (Linux toolchain and AC79 SDK mirror): https://github.com/DimmKirr/setup-fm1-toolchain
 - The Firmware Hub (installer and rescue): https://thefirmwarehub.com/
+- jvitkauskas/fm1-backup (factory V15 dump): https://github.com/jvitkauskas/fm1-backup
+- MvaveFM1Unbricker (ROM boot key, double-read backup): https://github.com/Quixotic7/MvaveFM1Unbricker

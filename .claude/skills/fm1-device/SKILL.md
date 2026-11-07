@@ -45,11 +45,22 @@ Exit codes of `fm1_install.py`: 0 done, 3 not found, 4 connection lost, 5 timeou
 2. Find the flash chip: the newer units (logo on the front) have the UC25HQ80 (`0xB36014`); older ones the Puya
    (`0x856014`). The full-flash backup below prints it. On the UC25HQ80, TransitFM1 must be 0.1.4 or later and
    a firmware that knows only the Puya keeps its saves in RAM and refuses later installs.
-3. Take the full-flash backup. It needs the chip's ROM boot: with fm1_rescue run read only
-   (`sudo $PY bsp/tools/fm1_rescue.py V15.fwsc V16.fwsc`, no `--write`), or MvaveFM1Unbricker's verified double
-   read (github.com/Quixotic7/MvaveFM1Unbricker). Getting a working unit into ROM boot depends on its firmware
-   (the Unbricker documents a button hold); ask Ian to do that part by hand, and say what you expect to see.
-4. Make sure a rescue path exists before going on: the Unbricker (plain USB, needs the unit to reach ROM boot)
+3. Take the full-flash backup, twice, and check the two reads are identical. It needs the chip's ROM boot:
+   - fm1_rescue run read only (no `--write`). It needs pyusb and libusb-package in `~/.fm1-venv`, and both stock
+     packages, checked against the hashes in the script: V15 from FM1 Open (below), V16 from M-VAVE's download URL.
+     Pass `--loader` with a copy of `wl82loader.bin` you have checked against the script's hash. It saves the
+     image next to the first package.
+   - sudo needs a terminal for its password, so Ian runs it in his own Terminal window, not with `!`.
+   - MvaveFM1Unbricker's double read (github.com/Quixotic7/MvaveFM1Unbricker) works on Windows and Linux only.
+
+   From stock V15, holding OCT- and OCT+ at power-on did not reach ROM boot (2026-11-07). The Unbricker's SysEx key
+   did. Ian starts fm1_rescue first (it waits 120 s), then runs `$PY .claude/skills/fm1-device/fm1_softkey.py`
+   from the repo root. The script checks for a stock identity on the hardware port before it sends the key.
+   Expect a black screen, then `WL82 UBOOT1.00`. One power cycle afterwards brings V15 back.
+   Never send the key from a one-liner: CoreMIDI drops a message sent just after a port opens.
+4. A factory V15 unit is not the package's V15 build (`docs/research/fm1-firmware-development.md`), so nearly
+   all app sectors differ from the package; that is expected. The backup is the only copy of the factory build.
+5. Make sure a rescue path exists before going on: the Unbricker (plain USB, needs the unit to reach ROM boot)
    or the FM-1 Transporter (a Seeed XIAO RP2040 on the USB data lines, for a unit silent on USB).
 
 ## The install route
