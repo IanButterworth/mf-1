@@ -45,6 +45,8 @@ struct MF1App: App {
                 }
                 Toggle("Frameless Window", isOn: applying($frameless) { delegate.setFrameless($0) })
                     .keyboardShortcut("f", modifiers: [.command, .control])
+                Divider()
+                Toggle("iScream Mode", isOn: Binding(get: { false }, set: { Engine.switchMode(iScream: $0) }))
             }
             CommandMenu("Songs") {
                 SongMenu(model: model)

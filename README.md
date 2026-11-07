@@ -106,10 +106,10 @@ normal window. Help › MF-1 Keyboard and Controls lists the rest.
 
 ## iScream
 
-The same engine and panel also run as **iScream**, a small synth made of ice cream: flavors
+View › iScream Mode turns MF-1 into **iScream**, a small synth made of ice cream: flavors
 are the sounds, the cone is the filter, and the toppings are the effects. There are twelve
-flavors and no menus; the screen draws the sundae you are building. `scripts/build-iscream.sh`
-builds `build/iScream.app`. It has its own settings folder and MIDI port, and uses only what a real
+flavors and no menus; the screen draws the sundae you are building. Switching relaunches the app.
+iScream has its own settings folder and MIDI port, so it never touches MF-1's patches, and uses only what a real
 FM-1 has, so the flavors export as a standard DX7 bank. See `docs/iscream.md`, including what is not
 verified (the sounds were tuned by measurement, not yet on hardware, and it does not run as firmware).
 

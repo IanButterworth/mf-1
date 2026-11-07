@@ -30,6 +30,8 @@ struct IScreamApp: App {
             CommandGroup(after: .toolbar) {
                 Toggle("Frameless Window", isOn: applying($frameless) { delegate.setFrameless($0) })
                     .keyboardShortcut("f", modifiers: [.command, .control])
+                Divider()
+                Toggle("iScream Mode", isOn: Binding(get: { true }, set: { Engine.switchMode(iScream: $0) }))
             }
             CommandMenu("Flavors") { FlavorMenu(model: model) }
             CommandMenu("Device") {
@@ -245,7 +247,7 @@ final class IScreamDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-// Development aid, as for MF-1: `iScream --snapshot out.png [flavor N] [focus N] [scoops N]` renders
+// Development aid, as for MF-1: `MF-1 --iscream --snapshot out.png [flavor N] [focus N] [scoops N]` renders
 // the panel offscreen and quits. It never writes the user's sundaes.
 enum IScreamSnapshot {
     @MainActor static func runIfRequested(model: IScreamModel) {
@@ -294,7 +296,7 @@ enum IScreamSnapshot {
     }
 }
 
-// `iScream --selfcheck` drives the model as the panel would and checks the engine follows. It saves the
+// `MF-1 --iscream --selfcheck` drives the model as the panel would and checks the engine follows. It saves the
 // sundaes as it ends, with the current flavor reset to its recipe.
 enum IScreamSelfCheck {
     static func run(_ m: IScreamModel) {

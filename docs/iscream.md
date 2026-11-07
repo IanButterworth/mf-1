@@ -1,8 +1,8 @@
 # iScream
 
-iScream is a small synth made of ice cream, running on the MF-1 engine. It is the same binary as
-MF-1 under another name: the app is iScream when its executable or bundle identifier says so, or when
-started with `--iscream`. `scripts/build-iscream.sh` builds `build/iScream.app`.
+iScream is a small synth made of ice cream, running on the MF-1 engine. It is a mode of MF-1:
+View › iScream Mode switches to it and back, relaunching the app, and `--iscream` starts in it.
+The mode is chosen at launch because iScream has its own engine state and MIDI port.
 
 The idea: no menu diving. You turn **FLAVOR** and get a different, good-sounding voice. The screen
 is the sundae you are building, and the knobs shape it.
@@ -75,6 +75,6 @@ therefore means the same thing on the hardware. Faithful mode is always on and E
   and harmonics per flavor.
 - `mf1-render <banks> iscream-env <flavor> <field> <a> <b> <c>`: level over time for three settings of a
   sundae field, for tuning Melt and the like.
-- `iScream --snapshot out.png [screen|sheet] [flavor N] [focus N] [scoops N]`: renders the panel, the
+- `MF-1 --iscream --snapshot out.png [screen|sheet] [flavor N] [focus N] [scoops N]`: renders the panel, the
   screen at four times the size, or every flavor's screen on one sheet.
-- `iScream --selfcheck`: drives the model as the panel would and checks the engine follows.
+- `MF-1 --iscream --selfcheck`: drives the model as the panel would and checks the engine follows.

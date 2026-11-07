@@ -11,12 +11,31 @@ enum Engine {
     // librarians and editors, which match ports by that substring, find it.
     static var portName: String { isIScream ? "iScream (FM-1 Compatible)" : "MF-1 (FM-1 Compatible)" }
 
-    // The same binary is also iScream: when the app is called iScream, or started with --iscream.
+    // iScream mode is picked at launch, because each mode has its own engine state and MIDI port.
+    // Snapshots render MF-1 unless --iscream is given, whatever mode was last used.
     static let isIScream: Bool = {
-        let name = URL(fileURLWithPath: CommandLine.arguments[0]).lastPathComponent.lowercased()
-        return name == "iscream" || CommandLine.arguments.contains("--iscream")
-            || Bundle.main.bundleIdentifier == "org.mf1.iscream"
+        let args = CommandLine.arguments
+        return args.contains("--iscream")
+            || (!args.contains("--snapshot") && UserDefaults.standard.bool(forKey: "iscreamMode"))
     }()
+
+    // Saves the mode and relaunches the app in it.
+    static func switchMode(iScream: Bool) {
+        guard iScream != isIScream else { return }
+        UserDefaults.standard.set(iScream, forKey: "iscreamMode")
+        let app = Bundle.main.bundleURL
+        guard app.pathExtension == "app" else {
+            alert("The mode changes the next time MF-1 starts.")
+            return
+        }
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: app, configuration: config) { _, error in
+            DispatchQueue.main.async {
+                if let error { alert(error.localizedDescription) } else { NSApp.terminate(nil) }
+            }
+        }
+    }
 
     static var stateDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

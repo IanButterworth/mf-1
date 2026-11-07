@@ -111,8 +111,8 @@ Licences matter when reading community code:
   the song library and the audio output list.
   - `PanelView` is generic over `PanelDriver` (`PanelDriver.swift`): `DeviceModel` drives MF-1,
     `IScreamModel` drives iScream. Anything new that the panel needs from its model goes on the protocol.
-  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`; `main.swift` picks the front end) is the same
-    binary as MF-1 under another name. Keep MF-1's behaviour unchanged when editing shared panel code,
+  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`; `main.swift` picks the front end) is a mode
+    of the same app (View › iScream Mode, or `--iscream`), picked at launch. Keep MF-1's behaviour unchanged when editing shared panel code,
     and check both with `--snapshot`.
 - `Sources/IScreamCore` (C++17): iScream's flavors, how a sundae becomes an FM-1 voice and effects. It
   uses only the public C API and only what a real FM-1 has (see `docs/iscream.md`).
