@@ -3,4 +3,6 @@
 build/
 *.o
 .DS_Store
-.claude/
+.claude/*
+!.claude/skills/
+!.claude/commands/
