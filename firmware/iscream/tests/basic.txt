@@ -3,6 +3,8 @@
 wait 600
 expect flavor 0
 expect focus 0
+expect battery 3
+expect low_battery 0
 shot boot.png
 key 7 down
 wait 300

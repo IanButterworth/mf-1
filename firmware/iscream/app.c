@@ -6,6 +6,9 @@
 #include "iscream.h"
 #include "iscream.c"
 #include "synth.h"
+#ifdef PLAT_HOST
+#include <stdlib.h>
+#endif
 
 #define NFLAVORS ISC_FLAVOR_COUNT
 #define KEY_VELOCITY 90                  /* the FM-1's keys have no velocity; this is its global default */
@@ -48,6 +51,8 @@ static struct {
     uint8_t save_long;
     uint8_t oct_both;
     uint32_t drawn_at;
+    int8_t battery;
+    uint8_t low_battery;
 } ui;
 
 static int flavor(void) { return sundae[ISC_FLAVOR]; }
@@ -158,6 +163,32 @@ static void show_pill(const char *name, const char *v)
 }
 
 void app_say(const char *a, const char *b) { show_pill(a, b && b[0] ? b : 0); }
+
+static int battery_level(void)
+{
+#ifdef PLAT_HOST
+    const char *s = getenv("ISCREAM_BATTERY");   /* the simulator's battery is always full: a test can set another */
+    if (s && s[0] >= '0' && s[0] <= '4')
+        return s[0] - '0';
+#endif
+    return plat_battery();
+}
+
+/* As on the FM-1: bars at the top right, and LOW BATTERY over the whole screen at the last bar, until the
+ * battery is charged or USB powers the FM-1. */
+static void battery(void)
+{
+    int b = battery_level();
+    if (b == ui.battery)
+        return;
+    ui.battery = (int8_t)b;
+    ui.redraw = 1;
+    if ((b == 0) != ui.low_battery) {
+        ui.low_battery = b == 0;
+        if (ui.low_battery && ann_on())
+            ann_say("LOW BATTERY", 0, ANN_NOW);
+    }
+}
 
 /* ------------------------------------------------------------------ the engine's side */
 
@@ -568,6 +599,10 @@ int app_expect(const char *what, int *got)
         *got = value(ISC_SWEET);
     else if (isc_streq(what,"cone"))
         *got = value(ISC_CONE_ON);
+    else if (isc_streq(what,"battery"))
+        *got = ui.battery;
+    else if (isc_streq(what,"low_battery"))
+        *got = ui.low_battery;
     else if (isc_streq(what,"voices"))
         *got = isc_synth_active_voices();
     else if (isc_streq(what,"octave"))

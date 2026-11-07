@@ -126,8 +126,17 @@ struct IScreamScreen: View {
         ctx.fill(Path(CGRect(x: 0, y: 0, width: 240, height: 34)), with: .color(Color(hex: 0xff5fae).opacity(0.18)))
         text(&ctx, info.title, CGPoint(x: 9, y: 14), size: 19, color: Color(hex: 0x8a1a57), anchor: .leading, weight: .heavy)
         text(&ctx, info.blurb, CGPoint(x: 10, y: 28), size: 9.5, color: Color(hex: 0xb23a7e), anchor: .leading, weight: .semibold)
-        text(&ctx, "▾", CGPoint(x: 226, y: 15), size: 14, color: Color(hex: 0xb23a7e))
+        text(&ctx, "▾", CGPoint(x: 196, y: 15), size: 14, color: Color(hex: 0xb23a7e))
+        drawBattery(&ctx, color: Color(hex: 0x8a1a57))
         ctx.fill(Path(CGRect(x: 0, y: 33, width: 240, height: 1)), with: .color(Color(hex: 0xff5fae).opacity(0.35)))
+    }
+
+    // The FM-1's battery icon where the firmware draws it. As in MF-1, the emulator's battery is a third full.
+    private func drawBattery(_ ctx: inout GraphicsContext, color: Color) {
+        let r = CGRect(x: 207, y: 9, width: 24, height: 13)
+        ctx.stroke(Path(roundedRect: r, cornerRadius: 3), with: .color(color), lineWidth: 1.5)
+        ctx.fill(Path(CGRect(x: 231.5, y: 13, width: 2, height: 5)), with: .color(color))
+        ctx.fill(Path(CGRect(x: 209.75, y: 11.5, width: 5, height: 8)), with: .color(color))
     }
 
     private func drawBankPrompt(_ ctx: inout GraphicsContext) {

@@ -724,6 +724,33 @@ static void draw_title(void)
     rrect(0, 33, 240, 1, 0, 0xFF5FAEu, 0.35f);
 }
 
+/* The FM-1's battery icon in the title's colour: up to three bars, and a bolt while USB powers it. */
+static void draw_battery(float x, float y, float k, uint32_t rgb)
+{
+    int i;
+    if (ui.battery < 0)
+        return;
+    rrect_stroke(x, y, 24 * k, 13 * k, 3 * k, 1.5f * k, rgb, 1);
+    rrect(x + 24.5f * k, y + 4 * k, 2 * k, 5 * k, 0, rgb, 1);
+    if (ui.battery == 4) {
+        float b[6][2] = {{x + 13.5f * k, y + 2 * k}, {x + 8 * k, y + 7.5f * k}, {x + 11.5f * k, y + 7.5f * k},
+                         {x + 10.5f * k, y + 11 * k}, {x + 16 * k, y + 5.5f * k}, {x + 12.5f * k, y + 5.5f * k}};
+        poly((const float (*)[2])b, 6, rgb, 1);
+        return;
+    }
+    for (i = 0; i < ui.battery && i < 3; i++)
+        rrect(x + (2.75f + 6.5f * (float)i) * k, y + 2.5f * k, 5 * k, 8 * k, 0, rgb, 1);
+}
+
+static void draw_low_battery(void)
+{
+    int32_t y;
+    for (y = band_y; y < band_y + BAND_H; y++)
+        span(y, 0, 240, mix_rgb(0xFFE6F3u, 0xFFB4DCu, (float)y / 240.f), 1);
+    draw_battery(84, 78, 3, 0x8A1A57u);
+    text_at(120, 132, &FONT_L, "LOW BATTERY", 0x8A1A57u, 1);
+}
+
 static void draw_badge(void)
 {
     const char *label = FOCUS_TITLE[focus];
@@ -864,8 +891,14 @@ static void draw_screen(float t, float peak)
     for (b = 0; b < 3; b++) {
         band_y = b * BAND_H;
         cv_begin(240, BAND_H, 0);
+        if (ui.low_battery) {
+            draw_low_battery();
+            cv_blit(0, (uint32_t)band_y);
+            continue;
+        }
         draw_backdrop(t);
         draw_title();
+        draw_battery(207, 9, 1, 0x8A1A57u);
         draw_sundae(t, peak);
         draw_badge();
         draw_tray();
@@ -877,7 +910,11 @@ static void draw_screen(float t, float peak)
     }
 }
 
-void app_ui_init(void) { ui.redraw = 1; }
+void app_ui_init(void)
+{
+    ui.redraw = 1;
+    ui.battery = -2;
+}
 
 /* The screen moves while a note sounds and gently when idle, and is redrawn at once after any change. */
 void app_frame(void)
@@ -887,6 +924,7 @@ void app_frame(void)
     input();
     lights();
     save_when_quiet();
+    battery();
     if (ui.pill[0] && (int32_t)(now - ui.pill_until) >= 0) {
         ui.pill[0] = 0;
         ui.redraw = 1;

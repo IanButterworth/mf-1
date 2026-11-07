@@ -66,8 +66,13 @@ therefore means the same thing on the hardware. Faithful mode is always on and E
 - iScream installs its flavors into banks A to D of its own engine state on every launch, so a bank
   stored through MIDI is lost at the next launch. It has its own state folder and MIDI port
   ("iScream (FM-1 Compatible)"), so it never touches MF-1's patches.
-- Not done: running as firmware on the real device. The stock firmware cannot run it. The FM-1 community
-  OS route (as Felucca does) would need a separate port of the flavor recipes and the screen.
+- As firmware on the real FM-1 (`firmware/iscream`), iScream is an fm1-base app with a C port of the engine
+  and the screen; the stock firmware cannot run it.
+- The battery icon sits top right, as on the FM-1. On the device it shows the battery's 0 to 3 bars, as the
+  stock firmware reads them, and LOW BATTERY covers the screen at the last bar until the battery is charged or
+  USB powers it; the keys still play. On USB power it shows a bolt: the stock firmware's icon on USB is not
+  documented, so this is iScream's own choice. The desktop app has no battery to read and always shows one
+  bar, as MF-1 does.
 
 ## Tools
 
