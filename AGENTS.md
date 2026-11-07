@@ -119,6 +119,11 @@ Licences matter when reading community code:
 - `Sources/mf1-render`: headless checks (`main.cc`, `tests_engine.cc`, `iscream_tests.cc`), benchmark
   and WAV rendering through the offline C API.
 - `docs/research/`: the specs the emulation is built from.
+- `firmware/iscream`: iScream as firmware for the real FM-1, on fm1-base (`firmware/fm1-base`, a submodule). Its
+  engine is a C port of MF-1's, kept bit for bit equal by `firmware/iscream/tests/run_parity.sh`; a change to
+  MF1Core's msfa code or to IScreamCore's flavors needs the parity test too. Build and test it with the
+  `fm1-firmware` skill. Anything that touches a connected FM-1 goes through the `fm1-device` skill, which asks
+  before every write.
 
 ## Build and test
 
