@@ -63,6 +63,18 @@ iScream's firmware is in `firmware/iscream`, on fm1-base (a git submodule). Reas
 - It has a host simulator, so the firmware can be built and heard on a Mac before any hardware is involved.
 - It knows both flash chips and comes with the update and rescue path.
 
+### First install on hardware (2026-11-07)
+
+Our unit (factory V15, Puya `0x856014`), with `fm1_install.py` from the Mac:
+- V15 to TransitFM1 0.1.4 (`transit-0.1.4.fwsc`, SHA-256 `3ba85410…`): a classic install, exit 0. `--info` still
+  gives `FM-1_015`, as designed; the USB serial number reads `TransitFM1-0.1.4`. The TRANSIT screen, no red line.
+  TransitFM1's own SysEx query (`F0 7D 54 46 31 01 F7`) got no answer in 1.5 s; not looked into.
+- TransitFM1 to iScream (`iscream.fwsc`, `FM-1_4700`, build `DAA5BFE7`, SHA-256 `6d7b85a6…`): a classic install,
+  exit 0, `--info` gives `FM-1_4700`. The screen shows Vanilla, and keys play without audible dropouts. `fm1_remote.py
+  log` reports no crash after playing.
+- Not yet measured: CPU load at 12 voices with effects, xruns, output level, the screen frame rate. `fm1_remote.py
+  screen` prints nothing until iScream announces a change, so it reads empty right after boot.
+
 The firmware does not use M-VAVE's engine. It ports MF-1's msfa core and effects to C, so on hardware it sounds like
 MF-1 in Faithful mode, not literally like the stock V15 firmware. Where the two differ is listed in
 `fm1-protocol-and-engine.md` §2.
