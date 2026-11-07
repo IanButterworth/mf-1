@@ -3,7 +3,8 @@
 iScream running on the M-VAVE FM-1 itself, on [fm1-base](https://github.com/charlesvestal/fm1-base) (the
 `../fm1-base` submodule) and felucca-bsp. The sound engine in `dsp/` is a C port of MF-1's: the FM voices render
 the same samples as MF-1 and the sundaes give the desktop app's voices and effects, which `tests/run_parity.sh`
-checks. Not tried on hardware yet. See `docs/research/fm1-firmware-development.md` for the route and its risks.
+checks. It has run on one unit (it boots, plays and logged no crash); CPU load and output level are not measured
+yet. See `docs/research/fm1-firmware-development.md` for the route and its risks.
 
 | Path | What |
 | --- | --- |

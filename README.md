@@ -1,8 +1,12 @@
 # MF-1
 
-A native macOS emulator of the M-VAVE FM-1 pocket FM synthesizer: the same panel, screens,
-engine and MIDI/SysEx behaviour, so patches, librarians and workflows made for the FM-1 work
-with it.
+Two things for the M-VAVE FM-1 pocket FM synthesizer, sharing one engine:
+
+- **The MF-1 app**: a native macOS emulator of the FM-1. It has the same panel, screens, engine and MIDI/SysEx
+  behaviour, so patches, librarians and workflows made for the FM-1 work with it. It also has an
+  [iScream](#iscream) mode.
+- **[iScream firmware](#firmware-for-the-fm-1)**: iScream running on the FM-1 itself, in place of M-VAVE's
+  firmware. Its engine renders the same samples as the app.
 
 ## Install
 
@@ -111,7 +115,19 @@ are the sounds, the cone is the filter, and the toppings are the effects. There 
 flavors and no menus; the screen draws the sundae you are building. Switching relaunches the app.
 iScream has its own settings folder and MIDI port, so it never touches MF-1's patches, and uses only what a real
 FM-1 has, so the flavors export as a standard DX7 bank. See `docs/iscream.md`, including what is not
-verified (the sounds were tuned by measurement, not yet on hardware, and it does not run as firmware).
+verified. iScream started as DKEngineering's ice cream skin for MF-1.
+
+## Firmware for the FM-1
+
+`firmware/iscream` builds iScream as firmware for the real FM-1. It is an app on
+[fm1-base](https://github.com/charlesvestal/fm1-base) (a git submodule) and felucca-bsp. Its engine is a C port of
+MF-1's, and a parity test checks that it renders the same samples as the app. It has run on one unit: it boots, plays
+and has logged no crash. CPU load, dropouts and output level have not been measured yet. Build and install steps
+are in `firmware/iscream/README.md`; the route and its risks are in `docs/research/fm1-firmware-development.md`.
+
+Installing firmware on an FM-1 can leave it unable to start. Back up its whole flash first, and keep a rescue
+route at hand. You do this at your own risk. MF-1 provides no M-VAVE firmware: to go back to stock, use M-VAVE's
+own V15 package.
 
 ## Known differences
 
@@ -127,9 +143,16 @@ verified (the sounds were tuned by measurement, not yet on hardware, and it does
 
 ## Licences
 
-- MF-1 is MIT licensed (`LICENSE`), except as listed below.
+- MF-1 is MIT licensed (`LICENSE`), except as listed below and in `THIRD_PARTY.md`.
 - `Sources/MF1Core/dsp` derives from msfa, Copyright 2012 Google Inc., Apache License 2.0
   (`LICENSES/Apache-2.0.txt`).
 - Fonts: Orbitron and Share Tech Mono, SIL Open Font License (`LICENSES/`).
-- Factory banks: see `Sources/MF1/Resources/Banks/README.md`.
-- "FM-1" and "M-VAVE" are names of M-VAVE's product, used here only to describe compatibility.
+- Factory banks: M-VAVE's V15 bank, unmodified, under Apache-2.0 as M-VAVE distributes it. Many voices derive
+  from Yamaha DX7 cartridges; see `Sources/MF1/Resources/Banks/README.md`.
+- Firmware: fm1-base and felucca-bsp are MPL-2.0, linked as a submodule and not copied here. JieLi's toolchain
+  and AC79 SDK are downloaded at build time. A built `.fwsc` contains SDK files under Apache-2.0, so ship the
+  licence texts fm1-base's `LICENSING.md` lists with any package you share.
+- "FM-1" and "M-VAVE" are names of M-VAVE's product, and "DX7" is a Yamaha trademark. They are used here only to
+  describe compatibility. MF-1 is not affiliated with M-VAVE or Yamaha. The panel is MF-1's own drawing, with
+  no photographs or logos. The "FM-1" in the MIDI port name and the `FM-1_015` identity are there so that
+  existing editors recognise MF-1.
