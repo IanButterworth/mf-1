@@ -1,0 +1,56 @@
+# FM-1 custom firmware development
+
+Research date 2026-11-07. Confidence labels as in `fm1-protocol-and-engine.md`.
+
+## How firmware gets onto an FM-1
+
+- Every stock update and every community installer goes over USB-MIDI SysEx, using the update protocol in
+  `fm1-protocol-and-engine.md` §1.5.6. The `.fwsc` package has no cryptographic signature [confirmed, S2].
+- The flash has a single bank and the board has no debug header. A failed install can leave a unit that no
+  USB-MIDI installer reaches. The way back is the AC791N's mask-ROM USB download mode, reached with a dongle
+  (an RP2040 on the USB data lines, FM-1 Transporter; or a Flipper Zero) or with tools that send the unit there
+  from software when it still enumerates (MvaveFM1Unbricker, M-Flasher, the Firmware Hub's `fm1_rescue.py`)
+  [awesome-fm-1, recovery section].
+- FM-1s sold since autumn 2026 have a UC25HQ80 flash chip (JEDEC `0xB36014`) in place of the Puya
+  (`0x856014`). A firmware that knows only the Puya keeps its saves in RAM and refuses later installs, so the
+  unit then needs the download mode [Felucca issue #320; Dinghy 0.5 README; measured by those projects].
+- Community firmwares expect stock V15 as the starting point and offer it as the way back.
+
+## Routes to a firmware of your own
+
+| Route | What it gives | Licence | Build host | Notes |
+|---|---|---|---|---|
+| fm1-base (charlesvestal) on felucca-bsp (hugelton) | Platform layer above the hardware: screen and fonts, panel, LEDs, audio, MIDI over USB and TRS, storage, update and rescue, the screen reader. A host simulator and a browser emulator run the same app | MPL-2.0 per file; the app may use any licence | Linux x86-64; Docker on macOS | Beta. App interface in `include/plat.h` |
+| Dinghy, foma | Smallest working firmware on Felucca's platform; foma wraps it in one C file and a Docker image | GPL-3.0 | Docker | Dinghy 0.5 knows the UC25HQ80 |
+| FM1 Open (M-VAVE) | M-VAVE's own instrument engine as a binary library (`libfm1_engine.a`, DX7 core, 303, 808, effects) under a C SDK | App GPLv3 with an SDK linking exception; the engine may run only on FM1 devices | Windows, JieLi toolchain 2.5.3 | Its app is an eight-track groovebox with its own effects, not V15's six-effect chain |
+| A Felucca fork | A full firmware with an msfa 6-op engine | GPL-3.0 | Docker | The base of most published firmwares |
+
+Facts that shape the code, from fm1-base's README and `include/fastmath.h` [measured by those projects]:
+- The CPU (pi32v2) has a single-precision FPU and no fused multiply-add. `double` and libm are not allowed;
+  fm1-base's `fastmath.h` provides the maths. A host build with `-ffp-contract=off` computes the same samples.
+- The audio callback renders 24-bit stereo at 44.1 kHz, in blocks the app chooses (fm1-base's template: 256).
+- About 581 KB of flash for the app slot, 96 KB of RAM for `.data` and `.bss`, and a 336 KB pool for large
+  buffers.
+- fm1-base builds C only, as one unity build plus optional `-O2` units for DSP.
+
+## iScream's route
+
+iScream's firmware is in `firmware/iscream`, on fm1-base (a git submodule). Reasons:
+- fm1-base is MPL-2.0, so the iScream app stays MIT like the rest of MF-1.
+- It has a host simulator, so the firmware can be built and heard on a Mac before any hardware is involved.
+- It knows both flash chips and comes with the update and rescue path.
+
+The firmware does not use M-VAVE's engine. It ports MF-1's msfa core and effects to C, so on hardware it sounds like
+MF-1 in Faithful mode, not literally like the stock V15 firmware. Where the two differ is listed in
+`fm1-protocol-and-engine.md` §2.
+
+## Sources
+
+- awesome-fm-1: https://github.com/cicloid/awesome-fm-1 (index; recovery and development sections)
+- fm1-base: https://github.com/charlesvestal/fm1-base (README, DESIGN.md, LICENSING.md, template)
+- felucca-bsp: https://github.com/hugelton/felucca-bsp
+- Felucca: https://github.com/hugelton/Felucca and issue #320 (flash chip)
+- Dinghy: https://github.com/zvenson/dinghy ; foma: https://github.com/konsumer/foma
+- FM1 Open: https://github.com/m-vave/fm1_open
+- setup-fm1-toolchain (Linux toolchain and AC79 SDK mirror): https://github.com/DimmKirr/setup-fm1-toolchain
+- The Firmware Hub (installer and rescue): https://thefirmwarehub.com/

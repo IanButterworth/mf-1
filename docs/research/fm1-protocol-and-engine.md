@@ -413,12 +413,21 @@ of bend/glide sits near `0x01C61D57` [S10]. That is the FM-1+VA build, but the s
 - **V13** (2026-07-03): ARP/SEQ BPM sync; OP page memory; tone change in sequencer; some factory tones
   re-levelled; global velocity 1-127; MIDI channel select (default ALL); Program Change 0-127; rates 1/1 and 1/2.
 - **V14** (2026-07-06): no notes published. Its embedded image is 704,052 B and its app is 1888 B larger than V13 [S2].
-- **V15** (2026-07-30, current): brighter LEDs; per-bank Reset (to last import); **Glide** 0-1 s (mono only);
+- **V15** (2026-07-30): brighter LEDs; per-bank Reset (to last import); **Glide** 0-1 s (mono only);
   SEQ long notes, voice binding, Step, Chain; Init/Rename/Copy voice; long-press OP mute; **FX and ENV 0-10 →
   0-100**; **vel-0 note-on = note-off**; CC control of FX.
   File: https://yms-file-store.oss-cn-hongkong.aliyuncs.com/software/firmware/FM-1.fwsc , **699,956 bytes**,
   SHA-256 `DB1642B2B6FA5C2CCCB11FFD13878068BB28601678D3644049F99DC40E7EDB8A` [S8; S6; HTTP HEAD checked 2026-10-14].
-  Copyright M-VAVE; do not redistribute [S8].
+  Copyright M-VAVE; do not redistribute [S8]. Since October 2026 M-VAVE also ships this V15 image in FM1 Open
+  (`sdk/firmware/FM-1_015.fwsc`) under Apache-2.0, as a recovery image [S25 THIRD_PARTY.md, confirmed].
+- **V16** (2026-10-21, current; 718,196 bytes at the same URL) [S17 confirmed]: **eight Voices** (timbral parts),
+  each with its own preset, MIDI channel, level, pan, bend ranges, glide and fine tune; **20-voice polyphony**
+  shared across them (was 12). Patterns up to 64 steps with per-step ratchets, and an 8 × 8 arrangement replaces
+  chaining. **Effects move to a shared library of 128 FX groups**, stored apart from voice presets; all Voices go
+  through one shared stereo chain. **FX CCs move from 0-23 to 70-93** (Filter 70-73, Reverb 74-77, Delay 78-81,
+  Distortion 82-85, Chorus 86-89, Phaser 90-93; the old map is gone). Adds CC7 master volume, CC11 expression,
+  ARP from external MIDI, Bank Export as DX7 SysEx, a Panic hold on PLAY/STOP, key LEDs from MIDI notes 0-26 on the
+  effect channel, RGB colour editing of the screen. MF-1 emulates V15; see section 8.
 
 **.fwsc container** [S2 11-ota-protocol.md; S3]: JieLi UFW (`@JMUA`, `JLUFW`, target `AC791N`). The first
 960 bytes are 20 × 0x30 blocks of 0x2F data + 1 marker byte; strip the markers to get a 940-byte logical header,
@@ -524,6 +533,7 @@ facts. Facts are not copyrightable. Avoid copying GPL code unless the emulator w
 - [S22] Drey Andersson: https://dreyandersson.com/blog/m-vave-fm-1-custom-firmware/
 - [S23] Tao of Mac review: https://taoofmac.com/space/reviews/2026/10/11/2100
 - [S24] fwradar: https://fwradar.com/p/m-vave-fm-1
+- [S25] M-VAVE FM1 Open: https://github.com/m-vave/fm1_open (README, LICENSE.md, THIRD_PARTY.md, sdk/include)
 - Also read: cicloid/awesome-fm-1 README (https://github.com/cicloid/awesome-fm-1), keremimo/melodee LICENSING.md,
   Synth Anatomy librarian article (https://synthanatomy.com/2026/07/m-vave-fm-1-patch-librarian.html: Benny Sparra's
   browser librarian; 4 banks A-D × 32; no protocol detail).
@@ -537,3 +547,6 @@ facts. Facts are not copyrightable. Avoid copying GPL code unless the emulator w
 6. Effect DSP (reverb/chorus/phaser algorithms, cutoff curve 0-107).
 7. Glide curve (msfa porta or custom); one-step chain gap; arp/seq shared vs separate tempo; stock MIDI clock receive.
 8. Object 5 read vs write semantics in the `00 59` protocol (§1.5.4).
+9. Whether MF-1 should follow V16 (eight Voices, 20-voice polyphony, the FX library and CCs 70-93), offer V15
+   and V16 as a choice, or stay on V15, which custom firmwares still expect as their base. Also whether V16's
+   engine sounds the same as V15's for one Voice.
