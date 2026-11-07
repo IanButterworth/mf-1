@@ -8,6 +8,8 @@ Two things for the M-VAVE FM-1 pocket FM synthesizer, sharing one engine:
 - **[iScream firmware](#firmware-for-the-fm-1)**: iScream running on the FM-1 itself, in place of M-VAVE's
   firmware. Its engine renders the same samples as the app.
 
+![iScream mode: the pink panel with a three-scoop strawberry cone on the screen](docs/images/iscream.jpg)
+
 ## Install
 
 Download `MF-1-<version>.dmg` from the GitHub releases, open it and drag MF-1 to Applications.
@@ -109,8 +111,6 @@ the case to move it, and use ⌘W or ⌘Q to close. View › Frameless Window (�
 normal window. Help › MF-1 Keyboard and Controls lists the rest.
 
 ## iScream
-
-![iScream mode: the pink panel with a three-scoop strawberry cone on the screen](docs/images/iscream.jpg)
 
 View › iScream Mode turns MF-1 into **iScream**, a small synth made of ice cream: flavors
 are the sounds, the cone is the filter, and the toppings are the effects. There are twelve
