@@ -1,0 +1,11 @@
+# The battery's last bar: run with the simulator's battery set,
+#   MODES_BATTERY=0 ../fm1-modes/build/host/modes_host ../fm1-modes/tests/battery.txt OUT_DIR
+# LOW BATTERY covers the screen, and the keys still play (January: a chord of three).
+wait 600
+expect battery 0
+expect low_battery 1
+key 7 down
+wait 300
+expect voices 3
+shot low-battery.png
+key 7 up
