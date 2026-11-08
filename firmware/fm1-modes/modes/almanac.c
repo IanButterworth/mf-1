@@ -70,8 +70,9 @@ static uint32_t am_dim(void)
     return (value(AL_PLAY) != AL_SINGLE ? 1u << B_LFO : 0u) | (value(AL_SKY) != AL_CLEAR ? 1u << B_GLO : 0u);
 }
 
-static void am_scene(uint32_t step, uint32_t *px)
+static void am_scene(uint32_t now, uint32_t *px)
 {
+    uint32_t step = now / SCENE_MS;
     int activity = isc_synth_active_voices() * 25;
     almanac_scene(row, (int)step, activity > 100 ? 100 : activity, px);
 }
@@ -85,8 +86,9 @@ static uint32_t am_lighter(uint32_t c)
     return out;
 }
 
-static void am_draw(uint32_t step)
+static void am_draw(uint32_t now)
 {
+    uint32_t step = now / SCENE_MS;
     const alm_month_t *m = alm_month(item());
     char up[16], t[72] = {0};
     (void)step;
@@ -145,6 +147,7 @@ static const md_mode_t MODE_ALMANAC = {
     .magic = 0x314D4C41u, /* "ALM1" */
     .version = 1,
     .fields = AL_FIELDS,
+    .npages = 4,
     .page_title = {"MOOD", "WEATHER", "LAND", "PLAY"},
     .params = {{{"Mood", AL_MOOD, AM_MOOD}, {"Warmth", AL_WARMTH, FMT_NUM}, {"Linger", AL_LINGER, FMT_NUM},
                 {"Shimmer", AL_SHIMMER, FMT_NUM}},
@@ -177,5 +180,7 @@ static const md_mode_t MODE_ALMANAC = {
     .scene_h = AL_SCENE_H,
     .art_k = 3,
     .draw = am_draw,
+    .idle_ms = SCENE_MS,
+    .busy_ms = SCENE_MS,
     .expect = am_expect,
 };

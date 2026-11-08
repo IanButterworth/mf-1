@@ -12,8 +12,8 @@
 
 /* The settings (which mode ran last), the platform's panel calibration, then one object per mode. A new mode's object
  * goes on the end, so every object keeps its number from one release to the next. */
-enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_ALMANAC, OBJ_WOOF, OBJ_NOBJ };
-#define APP_STORE_MAP {0xFC000u, 0xDC000u, 0xDA000u, 0xD8000u}
+enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_ALMANAC, OBJ_WOOF, OBJ_ISCREAM, OBJ_NOBJ };
+#define APP_STORE_MAP {0xFC000u, 0xDC000u, 0xDA000u, 0xD8000u, 0xD6000u}
 
 void app_init(void);
 void app_boot(void);
@@ -25,6 +25,6 @@ void app_input_only(void);
 void app_say(const char *a, const char *b);
 
 /* the host simulator's checks: chooser, mode, item, page, voices, notes, arp, arp_notes, octave, battery, low_battery,
- * dirty, and each mode's own (Almanac: month, sky, play, mood; Woof: dog, place, play, pack, show) */
+ * dirty, and each mode's own (iScream: flavor, focus, scoops, sweet, cone; Almanac: month, sky, play, mood; Woof: dog, place, play, pack, show) */
 #define APP_HOST_EXPECT
 int app_expect(const char *what, int *got);

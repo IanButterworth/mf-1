@@ -5,7 +5,8 @@
 #include <stdint.h>
 #include "fx.h"
 
-#define MD_FIELDS 24                   /* the most fields a mode's row may have */
+#define MD_FIELDS 32                   /* the most fields a mode's row may have */
+#define MD_PAGES 7                     /* the most pages: one for each of the top row's buttons and HOME */
 #define MD_ITEMS 16                    /* the most items a mode may have */
 
 /* How repeats, chases and patterns run on the arpeggiator: MF-1's mode numbering and rate index, gate in percent,
@@ -34,11 +35,13 @@ typedef struct {
 typedef struct {
     const char *name;                  /* on the chooser */
     const char *reset_words;           /* "as composed": the pop-up after RESET */
+    const char *reset_pill;            /* what that pop-up says instead, if set ("Fresh scoop") */
     uint32_t obj, magic;               /* the store object the mode's rows live in, and its magic */
     uint8_t version;                   /* the rows' format: a saved copy of another version is not loaded */
     int fields;
-    const char *page_title[4];
-    md_param_t params[4][4];
+    int npages;                        /* pages on HOME, FX, SEL, ENV, LFO, EDIT and GLO, in that order */
+    const char *page_title[MD_PAGES];
+    md_param_t params[MD_PAGES][4];
     int algo_field;                    /* what the ALGORITHM knob turns, its name and format */
     const char *algo_name;
     uint8_t algo_fmt;
@@ -58,12 +61,15 @@ typedef struct {
     int (*releases)(int field);        /* a change to this field lets go of the held keys (a playing style) */
     void (*format)(int fmt, int v, char *out);
     const char *(*item_name)(int item);
-    void (*press)(uint32_t button);    /* LFO, EDIT and GLO */
+    void (*press)(uint32_t button);    /* the top row's buttons that are not pages */
+    void (*repress)(int page);         /* the button of the page already showing, pressed again */
+    int (*knob)(int k, int delta);     /* a turn of KNOB1-4 the mode handles itself: nonzero if it did */
     uint32_t (*dim)(void);             /* buttons it lights dimly */
     void (*frame)(uint32_t now);       /* every pass of the main loop, after the input */
     void (*selected)(void);            /* after the item changes */
-    void (*scene)(uint32_t step, uint32_t *px);   /* draws the picture into the shared buffer */
+    void (*scene)(uint32_t now, uint32_t *px);    /* draws the picture into the shared buffer, if the mode has one */
     int scene_w, scene_h, art_k;
-    void (*draw)(uint32_t step);       /* each screen band: what goes over and around the picture */
+    void (*draw)(uint32_t now);        /* each screen band: what goes over and around the picture, or everything */
+    uint16_t idle_ms, busy_ms;         /* how often the screen moves, and while a note sounds */
     int (*expect)(const char *what, int *got);    /* the host simulator's checks the mode adds */
 } md_mode_t;

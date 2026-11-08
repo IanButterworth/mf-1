@@ -110,7 +110,7 @@ static void draw_tabs(uint32_t accent)
 {
     const md_theme_t *t = M->theme;
     int i;
-    for (i = 0; i < NPAGES; i++) {
+    for (i = 0; i < M->npages && i < 4; i++) {
         int32_t x = 3 + i * 59;
         int focused = page == i;
         fill(x, 167, 56, 29, focused ? t->focus_bg : t->tab_bg);
@@ -184,11 +184,11 @@ static void draw_chooser(void)
     draw_battery(207, 9, 1, 0xF4F0E6u);
 }
 
-static void draw_screen(uint32_t step)
+static void draw_screen(uint32_t now)
 {
     int b;
-    if (!ui.chooser)
-        M->scene(step, scene_px);
+    if (!ui.chooser && M->scene)
+        M->scene(now, scene_px);
     for (b = 0; b < 3; b++) {
         band_y = b * BAND_H;
         cv_begin(240, BAND_H, 0);
@@ -197,9 +197,11 @@ static void draw_screen(uint32_t step)
         } else if (ui.chooser) {
             draw_chooser();
         } else {
-            fill(0, band_y, 240, BAND_H, M->theme->bg);
-            draw_scene();
-            M->draw(step);
+            if (M->scene) {
+                fill(0, band_y, 240, BAND_H, M->theme->bg);
+                draw_scene();
+            }
+            M->draw(now);
         }
         cv_blit(0, (uint32_t)band_y);
     }
@@ -211,7 +213,8 @@ void app_ui_init(void)
     ui.battery = -2;
 }
 
-/* The scenes move at a few frames a second, and the screen is redrawn at once after any change. */
+/* The screen moves at the mode's pace (faster while a note sounds, if it likes), and is redrawn at once after any
+ * change. */
 void app_frame(void)
 {
     uint32_t now = plat_ms();
@@ -229,10 +232,10 @@ void app_frame(void)
         ui.pill[0] = 0;
         ui.redraw = 1;
     }
-    if (ui.redraw || now - ui.drawn_at >= SCENE_MS) {
+    if (ui.redraw || now - ui.drawn_at >= (ui.chooser ? SCENE_MS : peak_level > 0.0002f ? M->busy_ms : M->idle_ms)) {
         ui.redraw = 0;
         ui.drawn_at = now;
-        draw_screen(now / SCENE_MS);
+        draw_screen(now);
     }
     ann_tick(now);
 }

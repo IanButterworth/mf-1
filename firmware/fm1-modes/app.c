@@ -12,7 +12,6 @@
 
 #define KEY_VELOCITY 90                  /* the FM-1's keys have no velocity; this is its global default */
 #define SCENE_MS 166u                    /* the scenes move at six frames a second */
-#define NPAGES 4
 
 /* ------------------------------------------------------------------ the modes */
 
@@ -474,9 +473,13 @@ static void reset_item(void)
     release_all_keys();
     M->defaults(item(), row);
     touched();
-    text_cat(t, M->item_name(item()));
-    text_cat(t, " ");
-    text_cat(t, M->reset_words);
+    if (M->reset_pill) {
+        text_cat(t, M->reset_pill);
+    } else {
+        text_cat(t, M->item_name(item()));
+        text_cat(t, " ");
+        text_cat(t, M->reset_words);
+    }
     show_pill(t, 0);
 }
 
@@ -500,6 +503,8 @@ static void turn_knob(int k, int delta)
     const md_param_t *p = &M->params[page][k];
     char t[16];
     int lo, hi;
+    if (M->knob && M->knob(k, delta))
+        return;
     M->range(p->field, &lo, &hi);
     set_field(p->field, value(p->field) + delta * (hi - lo + 1 > 12 ? 2 : 1));
     format(p->fmt, value(p->field), t);
@@ -530,14 +535,14 @@ static void octave_to(int o)
     mark_dirty();
 }
 
+/* HOME is the first page, then the top row's buttons from FX, as many as the mode has pages. */
 static int page_for_button(uint32_t b)
 {
-    switch (b) {
-    case B_HOME: return 0;
-    case B_FX: return 1;
-    case B_SEL: return 2;
-    case B_ENV: return 3;
-    }
+    static const uint8_t PAGE_BUTTON[MD_PAGES] = {B_HOME, B_FX, B_SEL, B_ENV, B_LFO, B_EDIT, B_GLO};
+    int i;
+    for (i = 0; i < M->npages; i++)
+        if (PAGE_BUTTON[i] == b)
+            return i;
     return -1;
 }
 
@@ -545,7 +550,10 @@ static void press(uint32_t b)
 {
     int p = page_for_button(b);
     if (p >= 0) {
-        set_page(p);
+        if (p == page && M->repress)
+            M->repress(p);
+        else
+            set_page(p);
         return;
     }
     switch (b) {
@@ -603,7 +611,7 @@ static void input(void)
         if ((e = plat_enc((int)k)) == 0)
             continue;
         switch (k) {
-        case EN_SELECT: set_page(clamp(page + (e > 0 ? 1 : -1), 0, NPAGES - 1)); break;
+        case EN_SELECT: set_page(clamp(page + (e > 0 ? 1 : -1), 0, M->npages - 1)); break;
         case EN_PRESET: select_item(item() + (e > 0 ? 1 : -1)); break;
         case EN_ALGO:
             set_field(M->algo_field, value(M->algo_field) + (e > 0 ? 1 : -1));
@@ -698,7 +706,7 @@ static void load_mode(void)
             table[it][0] = it;
             M->clamp(table[it]);
         }
-        page = clamp(st.page, 0, NPAGES - 1);
+        page = clamp(st.page, 0, M->npages - 1);
         octave = clamp(st.octave, -3, 3);
         it = clamp(st.item, 0, n - 1);
         if (M->extra_len)
@@ -864,13 +872,14 @@ int app_expect(const char *what, int *got)
 }
 
 #include "screen.c"
+#include "modes/iscream.c"
 #include "modes/almanac.c"
 #include "modes/woof.c"
 
 /* The modes, in the chooser's order. A new mode goes on the end, with a store object of its own (app.h). */
 static const md_mode_t *const *modes(int *n)
 {
-    static const md_mode_t *const all[] = {&MODE_ALMANAC, &MODE_WOOF};
+    static const md_mode_t *const all[] = {&MODE_ISCREAM, &MODE_ALMANAC, &MODE_WOOF};
     *n = (int)(sizeof all / sizeof all[0]);
     return all;
 }

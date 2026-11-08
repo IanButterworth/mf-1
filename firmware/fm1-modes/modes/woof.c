@@ -97,8 +97,9 @@ static uint32_t wm_arrived(void)
     return a > 1000u ? 1000u : a;
 }
 
-static void wm_scene(uint32_t step, uint32_t *px)
+static void wm_scene(uint32_t now, uint32_t *px)
 {
+    uint32_t step = now / SCENE_MS;
     woof_scene(row, (int)step, isc_synth_active_voices() > 0 ? 100 : 0, (int)wm_arrived(), px);
 }
 
@@ -129,8 +130,9 @@ static void wm_bubble(uint32_t step)
     text_at(x + w / 2, y + 4, &FONT_B, t, WM_INK, 1);
 }
 
-static void wm_draw(uint32_t step)
+static void wm_draw(uint32_t now)
 {
+    uint32_t step = now / SCENE_MS;
     const wf_breed_t *b = wf_breed(item());
     char t[48] = {0};
     fill(0, ART_Y + WF_SCENE_H * 2, 240, 1, WM_INK);
@@ -194,6 +196,7 @@ static const md_mode_t MODE_WOOF = {
     .magic = 0x31464F57u, /* "WOF1" */
     .version = 2,
     .fields = WF_FIELDS,
+    .npages = 4,
     .page_title = {"BARK", "MOOD", "PLACE", "PLAY"},
     .params = {{{"Size", WF_SIZE, FMT_NUM}, {"Gruff", WF_GRUFF, FMT_NUM}, {"Length", WF_LENGTH, FMT_NUM},
                 {"Yelp", WF_YELP, FMT_NUM}},
@@ -230,5 +233,7 @@ static const md_mode_t MODE_WOOF = {
     .scene_h = WF_SCENE_H,
     .art_k = 2,
     .draw = wm_draw,
+    .idle_ms = SCENE_MS,
+    .busy_ms = SCENE_MS,
     .expect = wm_expect,
 };

@@ -1,19 +1,72 @@
 # The modes firmware in fm1-base's host simulator: tools/build.py ../fm1-modes --host (from fm1-base), then
 #   ../fm1-modes/build/host/modes_host ../fm1-modes/tests/basic.txt OUT_DIR
-# The first time, with no key held, the first mode starts: Almanac.
+# The first time, with no key held, the first mode starts: iScream.
 wait 600
 expect chooser 0
 expect mode 0
-expect month 0
+expect flavor 0
+expect focus 0
 expect battery 3
+shot iscream.png
+key 7 down
+wait 300
+expect voices 1
+key 7 up
+turn PRESET 2
+wait 50
+expect flavor 2
+turn ALGO 2
+wait 50
+expect scoops 3
+press FX
+release FX
+wait 30
+expect focus 1
+turn K2 -4
+wait 30
+press SEL
+release SEL
+wait 30
+expect focus 2
+turn K1 3
+wait 1300
+shot cream.png
+# The cone's button again switches the cone off; RESET is a fresh scoop.
+press FX
+release FX
+press FX
+release FX
+wait 30
+expect cone 0
+press SAVE
+wait 900
+release SAVE
+wait 30
+expect scoops 1
+expect cone 1
+wait 2000
+expect dirty 0
+# A piano key held while switching on brings up the chooser; G picks Almanac.
+key 0 down
+reboot
+wait 600
+expect chooser 1
+shot chooser.png
+key 0 up
+wait 50
+tapkey 2
+wait 50
+expect chooser 0
+expect mode 1
+expect month 0
+# The key that chose does not play.
+expect notes 0
 shot almanac.png
-# January plays its chord, open fifths, on each key.
 key 7 down
 wait 300
 expect notes 3
 key 7 up
 wait 30
-# April's chord as a pattern of raindrops.
 turn PRESET 3
 wait 50
 expect month 3
@@ -30,21 +83,17 @@ wait 50
 expect sky 3
 wait 5000
 expect dirty 0
-# A piano key held while switching on brings up the chooser; G picks Woof.
-key 0 down
+# A picks Woof.
+key 9 down
 reboot
 wait 600
 expect chooser 1
-shot chooser.png
-key 0 up
+key 9 up
 wait 50
-tapkey 2
+tapkey 4
 wait 50
-expect chooser 0
-expect mode 1
+expect mode 2
 expect dog 0
-# The key that chose does not bark.
-expect notes 0
 wait 1800
 key 7 down
 wait 120
@@ -77,22 +126,31 @@ expect dirty 0
 reboot
 wait 600
 expect chooser 0
-expect mode 1
+expect mode 2
 expect dog 2
 expect show 0
-# And back to Almanac, which kept April under a foggy sky.
+# Each mode kept its own settings: Almanac's April under fog, iScream's third flavor.
 key 5 down
 reboot
 wait 600
-expect chooser 1
+key 5 up
+wait 50
+tapkey 2
+wait 50
+expect mode 1
+expect month 3
+expect sky 3
+key 5 down
+reboot
+wait 600
 key 5 up
 wait 50
 tapkey 0
 wait 50
 expect mode 0
-expect month 3
-expect sky 3
-wait 5000
+expect flavor 2
+expect scoops 1
+wait 2000
 expect dirty 0
 reboot
 wait 600
