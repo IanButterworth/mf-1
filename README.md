@@ -8,7 +8,10 @@ Two things for the M-VAVE FM-1 pocket FM synthesizer, sharing one engine:
 - **[iScream and Almanac firmware](#firmware-for-the-fm-1)**: iScream or Almanac running on the FM-1 itself, in place
   of M-VAVE's firmware. Their engine renders the same samples as the app.
 
-![iScream mode: the pink panel with a three-scoop strawberry cone on the screen](docs/images/iscream.jpg)
+<p>
+  <img src="docs/images/iscream.jpg" width="49%" alt="iScream mode: the pink panel with a three-scoop strawberry cone on the screen">
+  <img src="docs/images/almanac.jpg" width="49%" alt="Almanac mode: the ink-blue panel with brass knobs, showing October's autumn forest on the screen">
+</p>
 
 ## Install
 
@@ -119,6 +122,8 @@ iScream has its own settings folder and MIDI port, so it never touches MF-1's pa
 FM-1 has, so the flavors export as a standard DX7 bank. See `docs/iscream.md`, including what is not
 verified. iScream started as DKEngineering's ice cream skin for MF-1.
 
+![The twelve flavors' screens, from Vanilla to Mango](docs/images/iscream-flavors.jpg)
+
 ## Almanac
 
 View › Almanac Mode turns MF-1 into **Almanac**, the year as twelve sounds. Each month is a voice, a sky, a place and
@@ -127,8 +132,6 @@ SKY changes the weather, which colours the effects and is heard under the notes;
 Keys can play single notes, the month's chord, a split with a drone under the left hand, or a pattern of the chord on
 the arpeggiator. Like iScream it has its own settings folder and MIDI port, and uses only what a real FM-1 has. See
 `docs/almanac.md`.
-
-![Almanac mode: the ink-blue panel with brass knobs, showing October's autumn forest on the screen](docs/images/almanac.jpg)
 
 ![The twelve months' screens: from January's frozen lake to December's candlelit village](docs/images/almanac-months.jpg)
 
