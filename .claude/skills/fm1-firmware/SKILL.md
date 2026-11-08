@@ -59,6 +59,14 @@ Run all three after any change under `firmware/`, and the MF-1 suite too when `S
 - The engine must stay bit-identical to MF-1's for the FM voices. If parity fails, the port is wrong, not the test.
 - `tools/render.sh FLAVOR OUT.wav` plays a phrase through the firmware's engine, to listen on the Mac.
 
+## Almanac
+
+`firmware/almanac` is a second app on the same engine (`../iscream/dsp`). The same three checks apply, with
+`almanac` for `iscream`: `firmware/almanac/tests/run_parity.sh`, the host simulator with `tests/basic.txt` (and
+`ALMANAC_BATTERY=0` with `tests/battery.txt`), and the device build (`build/almanac.fwsc`, identity `FM-1_4800`).
+`dsp/months.inc`, `dsp/scene.c` and `dsp/AlmanacCore.h` come from `Sources/AlmanacCore` by
+`tools/gen_months.sh`: rerun it after any change there, never edit them by hand.
+
 ## Rules the device build enforces, and some it does not
 
 - No C library headers on the device: use `dsp/isc_libc.h`. No `double`, no libm (fm1-base's `fastmath.h`).

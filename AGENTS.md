@@ -111,17 +111,23 @@ Licences matter when reading community code:
   the song library and the audio output list.
   - `PanelView` is generic over `PanelDriver` (`PanelDriver.swift`): `DeviceModel` drives MF-1,
     `IScreamModel` drives iScream. Anything new that the panel needs from its model goes on the protocol.
-  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`; `main.swift` picks the front end) is a mode
-    of the same app (View › iScream Mode, or `--iscream`), picked at launch. Keep MF-1's behaviour unchanged when editing shared panel code,
+  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`) and Almanac are modes of the same app (View › iScream
+    Mode or Almanac Mode, or `--iscream` and `--almanac`), picked at launch; `main.swift` picks the front end. Keep MF-1's behaviour unchanged when editing shared panel code,
     and check both with `--snapshot`.
 - `Sources/IScreamCore` (C++17): iScream's flavors, how a sundae becomes an FM-1 voice and effects. It
   uses only the public C API and only what a real FM-1 has (see `docs/iscream.md`).
+- `Sources/AlmanacCore` (C++17 and C): Almanac's months, how a day becomes an FM-1 voice, effects and the notes a
+  key plays, and `scene.c`, the pixel-art scene in plain C for a later firmware (see `docs/almanac.md`). Almanac's
+  front end is `AlmanacModel`, `AlmanacScreen` and `AlmanacApp`; `ModeApp.swift` holds the window and keyboard code
+  iScream and Almanac share.
 - `Sources/mf1-render`: headless checks (`main.cc`, `tests_engine.cc`, `iscream_tests.cc`), benchmark
   and WAV rendering through the offline C API.
 - `docs/research/`: the specs the emulation is built from.
 - `firmware/iscream`: iScream as firmware for the real FM-1, on fm1-base (`firmware/fm1-base`, a submodule). Its
   engine is a C port of MF-1's, kept bit for bit equal by `firmware/iscream/tests/run_parity.sh`; a change to
-  MF1Core's msfa code or to IScreamCore's flavors needs the parity test too. Build and test it with the
+  MF1Core's msfa code or to IScreamCore's flavors needs the parity test too. `firmware/almanac` is Almanac on the same
+  engine; a change to AlmanacCore (months, skies, mapping or scene.c) needs `firmware/almanac/tools/gen_months.sh`
+  and `firmware/almanac/tests/run_parity.sh`. Build and test it with the
   `fm1-firmware` skill. Anything that touches a connected FM-1 goes through the `fm1-device` skill, which asks
   before every write.
 

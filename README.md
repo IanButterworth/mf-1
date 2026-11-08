@@ -3,10 +3,10 @@
 Two things for the M-VAVE FM-1 pocket FM synthesizer, sharing one engine:
 
 - **The MF-1 app**: a native macOS emulator of the FM-1. It has the same panel, screens, engine and MIDI/SysEx
-  behaviour, so patches, librarians and workflows made for the FM-1 work with it. It also has an
-  [iScream](#iscream) mode.
-- **[iScream firmware](#firmware-for-the-fm-1)**: iScream running on the FM-1 itself, in place of M-VAVE's
-  firmware. Its engine renders the same samples as the app.
+  behaviour, so patches, librarians and workflows made for the FM-1 work with it. It also has
+  [iScream](#iscream) and [Almanac](#almanac) modes.
+- **[iScream and Almanac firmware](#firmware-for-the-fm-1)**: iScream or Almanac running on the FM-1 itself, in place
+  of M-VAVE's firmware. Their engine renders the same samples as the app.
 
 ![iScream mode: the pink panel with a three-scoop strawberry cone on the screen](docs/images/iscream.jpg)
 
@@ -119,6 +119,19 @@ iScream has its own settings folder and MIDI port, so it never touches MF-1's pa
 FM-1 has, so the flavors export as a standard DX7 bank. See `docs/iscream.md`, including what is not
 verified. iScream started as DKEngineering's ice cream skin for MF-1.
 
+## Almanac
+
+View › Almanac Mode turns MF-1 into **Almanac**, the year as twelve sounds. Each month is a voice, a sky, a place and
+a mood, and the screen is a small pixel-art landscape of the day that rains, snows, blows and flashes as you play.
+SKY changes the weather, which colours the effects and is heard under the notes; the place sets the reverb and echo.
+Keys can play single notes, the month's chord, a split with a drone under the left hand, or a pattern of the chord on
+the arpeggiator. Like iScream it has its own settings folder and MIDI port, and uses only what a real FM-1 has. See
+`docs/almanac.md`.
+
+![Almanac mode: the ink-blue panel with brass knobs, showing October's autumn forest on the screen](docs/images/almanac.jpg)
+
+![The twelve months' screens: from January's frozen lake to December's candlelit village](docs/images/almanac-months.jpg)
+
 ## Firmware for the FM-1
 
 `firmware/iscream` builds iScream as firmware for the real FM-1. It is an app on
@@ -126,6 +139,9 @@ verified. iScream started as DKEngineering's ice cream skin for MF-1.
 MF-1's, and a parity test checks that it renders the same samples as the app. It has run on one unit: it boots, plays
 and has logged no crash. CPU load, dropouts and output level have not been measured yet. Build and install steps
 are in `firmware/iscream/README.md`; the route and its risks are in `docs/research/fm1-firmware-development.md`.
+
+`firmware/almanac` builds Almanac the same way, on iScream's engine port, with the desktop's own pixel-art scene. It
+runs on one unit too; see `firmware/almanac/README.md`.
 
 Installing firmware on an FM-1 can leave it unable to start. Back up its whole flash first, and keep a rescue
 route at hand. You do this at your own risk. MF-1 provides no M-VAVE firmware: to go back to stock, use M-VAVE's

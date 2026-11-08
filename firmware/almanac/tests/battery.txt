@@ -1,0 +1,11 @@
+# The battery's last bar: run with the simulator's battery set,
+#   ALMANAC_BATTERY=0 ../almanac/build/host/almanac_host ../almanac/tests/battery.txt OUT_DIR
+# LOW BATTERY covers the screen, and the keys still play.
+wait 600
+expect battery 0
+expect low_battery 1
+key 7 down
+wait 300
+expect voices 1
+shot low-battery.png
+key 7 up
