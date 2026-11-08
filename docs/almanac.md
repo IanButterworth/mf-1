@@ -12,20 +12,20 @@ rise from the ground as motes when you play.
 
 ## The months
 
-| Month | Voice | Sky | Place | Mood | Chord |
-|---|---|---|---|---|---|
-| January | Frost: glass bells | Snow | Lake | Pensive | open fifths |
-| February | Thaw: hollow ocarina | Fog | Forest | Wistful | minor ninth |
-| March | Gale: reedy lead that rises into each note | Breeze | Mountains | Calm | suspended fourth |
-| April | Showers: kalimba | Rain | Forest | Content | add nine |
-| May | Blossom: flute with a chiff | Clear | Meadow | Glad | six-nine |
-| June | Midsummer: warm strings | Clear | Meadow | Elated | major ninth |
-| July | Heat Haze: lazy tine piano | Breeze | Coast | Content | ninth |
-| August | Thunder: brass | Storm | Mountains | Pensive | low root under a seventh |
-| September | Harvest: warm harp | Breeze | Village | Content | major, spread |
-| October | Falling Leaves: soft vibes | Breeze | Forest | Pensive | minor seventh |
-| November | Mist: dark hollow pad | Fog | Lake | Wistful | low minor |
-| December | Candlelight: choir and celesta | Snow | Village | Glad | major seventh |
+| Month | Voice | Sky | Place | Mood | Chord | Keys play |
+|---|---|---|---|---|---|---|
+| January | Frost: glass bells | Snow | Lake | Pensive | open fifths | chords, open: bells ringing over the ice |
+| February | Thaw: hollow ocarina | Fog | Forest | Wistful | minor ninth | single notes: a lone breath, waiting |
+| March | Gale: reedy lead that rises into each note | Breeze | Mountains | Calm | suspended fourth | split, open: a lead over a drone, like wind on the hills |
+| April | Showers: kalimba | Rain | Forest | Content | add nine | a pattern of random drops |
+| May | Blossom: flute with a chiff | Clear | Meadow | Glad | six-nine | single notes: a flute's tune |
+| June | Midsummer: warm strings | Clear | Meadow | Elated | major ninth | chords, wide: lush strings |
+| July | Heat Haze: lazy tine piano | Breeze | Coast | Content | ninth | a lazy pattern, in the order played |
+| August | Thunder: brass | Storm | Mountains | Pensive | low root under a seventh | chords, wide: brass stabs |
+| September | Harvest: warm harp | Breeze | Village | Content | major, spread | a pattern, open: the harp strummed upwards |
+| October | Falling Leaves: soft vibes | Breeze | Forest | Pensive | minor seventh | a pattern falling, like leaves |
+| November | Mist: dark hollow pad | Fog | Lake | Wistful | low minor | split, wide: a deep drone in the mist |
+| December | Candlelight: choir and celesta | Snow | Village | Glad | major seventh | chords, open: the choir |
 
 ## How it is made
 
@@ -59,11 +59,12 @@ Mountains (hall, a long echo off the far side), Coast (wide and slow), Lake (a b
   - **Weather**: Sky, Weather (how strongly the sky colours the sound through the effects), Elements (how loud the
     weather itself is; 0 is none), Gusts (how fast it moves).
   - **Land**: Place, Distance (reverb; 0 is off), Echo (delay; 0 is off), Space (how large the place sounds).
-  - **Play**: how a key plays. Style is Single (the default), Chord (the month's chord on each key), Split (the
-    lowest twelve keys hold a drone of the root and fifth below, the rest play single notes) or Pattern (the
-    month's chord on the arpeggiator, in the month's own order: random drips in January and April, falling in
-    February and October, rising in May). Voicing is Close, Open (the second note lifted an octave) or Wide (a
-    low root added, and an extra octave for patterns). Tempo and Notes set a pattern's speed.
+  - **Play**: how a key plays; each month starts with its own (the table above). Style is Single, Chord (the
+    month's chord on each key), Split (the lowest twelve keys hold a drone of the root and fifth below, the rest
+    play single notes) or Pattern (the month's chord on the arpeggiator, in the month's own order: random drips in
+    January and April, falling in February and October, rising in May). Voicing is Close, Open (the second note
+    lifted an octave) or Wide (a low root added, and an extra octave for patterns). Tempo and Notes set a
+    pattern's speed.
   - The STYLE and VOICE buttons step through the styles and voicings.
 - Hold **RESET** (the SAVE button) to put the month back as composed.
 - Every month keeps how you left it, in `~/Library/Application Support/Almanac/days.json`.

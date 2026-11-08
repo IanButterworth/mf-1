@@ -95,10 +95,10 @@ std::string title(int i) {
   return m.month;
 }
 
-// A month on its own: clear sky, no weather, no room or echo.
+// A month's voice on its own: single notes, clear sky, no weather, no room or echo.
 void bare(int month, int32_t s[AL_FIELDS]) {
   almanac_default_day(month, s);
-  s[AL_SKY] = AL_CLEAR, s[AL_ELEMENTS] = 0, s[AL_DISTANCE] = 0, s[AL_ECHO] = 0;
+  s[AL_SKY] = AL_CLEAR, s[AL_ELEMENTS] = 0, s[AL_DISTANCE] = 0, s[AL_ECHO] = 0, s[AL_PLAY] = AL_SINGLE;
 }
 
 // Plays the notes one key gives, held for `hold` seconds, then released for `tail`.
@@ -167,6 +167,7 @@ int almanacTests() {
 
   {
     bool names = true, ranges = true, voices = true;
+    int styles[AL_PLAY_COUNT] = {0};
     for (int i = 0; i < n; i++) {
       AlmanacMonth m;
       names &= almanac_month(i, &m) && strlen(m.name) > 0 && strlen(m.month) > 0 && strlen(m.title) > 0 && strlen(m.blurb) > 0;
@@ -174,14 +175,18 @@ int almanacTests() {
       almanac_default_day(i, s);
       memcpy(c, s, sizeof(s));
       almanac_clamp(c);
-      ranges &= memcmp(s, c, sizeof(s)) == 0 && s[AL_MONTH] == i && s[AL_PLAY] == AL_SINGLE;
+      ranges &= memcmp(s, c, sizeof(s)) == 0 && s[AL_MONTH] == i;
+      styles[s[AL_PLAY]]++;
       almanac_load(s);
       uint8_t v[155];
       almanac_voice(s, v);
       for (int k = 0; k < 145; k++) voices &= mf1_edit_get(k) == v[k];
     }
     check(names, "every month has a voice name, a month, a title and a few words");
-    check(ranges, "every month's day is in range, names its month and plays single notes");
+    check(ranges, "every month's day is in range and names its month");
+    bool all = true;
+    for (int k = 0; k < AL_PLAY_COUNT; k++) all &= styles[k] >= 2;
+    check(all, "the months as composed use every playing style, each at least twice");
     check(voices, "a loaded month's edit buffer is exactly its voice");
   }
 

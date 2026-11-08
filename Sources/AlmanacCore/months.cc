@@ -12,6 +12,8 @@ struct Day {
   int place, distance, echo;
   int mood, shimmer = 0;
   int tempo = 96, step = 1;
+  // How the keys play the month as composed, chosen for its feel.
+  int play = AL_SINGLE, voicing = AL_CLOSE;
 };
 
 void compose(Month& m, Day d) {
@@ -29,8 +31,8 @@ void compose(Month& m, Day d) {
   s[AL_DISTANCE] = d.distance;
   s[AL_ECHO] = d.echo;
   s[AL_SPACE] = 50;
-  s[AL_PLAY] = AL_SINGLE;
-  s[AL_VOICING] = AL_CLOSE;
+  s[AL_PLAY] = d.play;
+  s[AL_VOICING] = d.voicing;
   s[AL_TEMPO] = d.tempo;
   s[AL_STEP] = d.step;
 }
@@ -49,7 +51,7 @@ std::vector<Month> build() {
     m.op[2] = car(84).ratio(4).env(99, 50, 30, 40, 99, 55, 0, 0).vel(3);
     m.op[3] = mod(64).ratio(7).env(99, 55, 35, 40, 99, 40, 0, 0).vel(3);
     m.chordOf({0, 7, 14}).pattern(4, 2);  // open fifths; icicles dripping at random
-    compose(m, {AL_SNOW, 45, 35, 25, AL_LAKE, 40, 20, 40, 0, 72, 3});
+    compose(m, {AL_SNOW, 45, 35, 25, AL_LAKE, 40, 20, 40, 0, 72, 3, AL_CHORD, AL_OPEN});
     all.push_back(m);
   }
   {  // February: grey thaw, waiting for the light. A soft, hollow ocarina.
@@ -73,7 +75,7 @@ std::vector<Month> build() {
     m.op[2] = car(88).env(80, 50, 40, 50, 99, 95, 92, 0).vel(2);
     m.op[3] = mod(76).ratio(3).env(70, 45, 35, 50, 99, 90, 85, 0).vel(2);
     m.chordOf({0, 5, 7, 12}).pattern(2, 2);  // suspended, never quite settling
-    compose(m, {AL_BREEZE, 60, 55, 60, AL_MOUNTAINS, 35, 30, 55, 20, 112, 3});
+    compose(m, {AL_BREEZE, 60, 55, 60, AL_MOUNTAINS, 35, 30, 55, 20, 112, 3, AL_SPLIT, AL_OPEN});
     all.push_back(m);
   }
   {  // April: showers in a wood. A kalimba plucked between the drops.
@@ -85,7 +87,7 @@ std::vector<Month> build() {
     m.op[2] = car(78).ratio(5).env(99, 75, 50, 50, 99, 30, 0, 0).vel(3);
     m.op[3] = mod(55).env(99, 70, 50, 50, 99, 30, 0, 0).vel(3);
     m.chordOf({0, 4, 7, 14}).pattern(4, 2);  // add nine, in drops
-    compose(m, {AL_RAIN, 40, 45, 55, AL_FOREST, 30, 35, 65, 0, 100, 3});
+    compose(m, {AL_RAIN, 40, 45, 55, AL_FOREST, 30, 35, 65, 0, 100, 3, AL_PATTERN});
     all.push_back(m);
   }
   {  // May: blossom in a meadow. A flute with a breathy chiff.
@@ -109,7 +111,7 @@ std::vector<Month> build() {
     m.op[2] = car(95).env(45, 40, 35, 40, 99, 96, 94, 0).vel(2);
     m.op[3] = mod(82).env(50, 40, 35, 40, 99, 95, 92, 0).vel(2);
     m.chordOf({0, 4, 7, 11, 14}).pattern(2, 1);  // major ninth, rocking
-    compose(m, {AL_CLEAR, 30, 0, 25, AL_MEADOW, 45, 15, 90, 10, 84, 1});
+    compose(m, {AL_CLEAR, 30, 0, 25, AL_MEADOW, 45, 15, 90, 10, 84, 1, AL_CHORD, AL_WIDE});
     all.push_back(m);
   }
   {  // July: heat haze on the coast. A lazy tine piano.
@@ -121,7 +123,7 @@ std::vector<Month> build() {
     m.op[2] = car(76).env(99, 70, 40, 45, 99, 40, 0, 0).vel(3);
     m.op[3] = mod(70).ratio(14).env(99, 75, 40, 45, 99, 30, 0, 0).vel(4);
     m.chordOf({0, 4, 10, 14}).pattern(5, 1);  // a lazy ninth, in the order played
-    compose(m, {AL_BREEZE, 25, 15, 15, AL_COAST, 35, 30, 70, 15, 76, 2});
+    compose(m, {AL_BREEZE, 25, 15, 15, AL_COAST, 35, 30, 70, 15, 76, 2, AL_PATTERN});
     all.push_back(m);
   }
   {  // August: thunder over the mountains. Brass that swells against the storm.
@@ -134,7 +136,7 @@ std::vector<Month> build() {
     m.op[2] = car(90).env(70, 45, 35, 50, 99, 95, 92, 0).vel(2);
     m.op[3] = mod(80).env(50, 40, 35, 50, 99, 90, 85, 0).vel(3);
     m.chordOf({-12, 0, 7, 10}).pattern(0, 1);  // a low root under a seventh, driving
-    compose(m, {AL_STORM, 45, 45, 40, AL_MOUNTAINS, 40, 30, 45, 0, 132, 3});
+    compose(m, {AL_STORM, 45, 45, 40, AL_MOUNTAINS, 40, 30, 45, 0, 132, 3, AL_CHORD, AL_WIDE});
     all.push_back(m);
   }
   {  // September: harvest in the village. A warm harp.
@@ -147,7 +149,7 @@ std::vector<Month> build() {
     m.op[2] = car(80).env(99, 45, 30, 45, 99, 70, 0, 0).vel(3);
     m.op[3] = mod(60).ratio(3).env(99, 65, 40, 45, 99, 40, 0, 0).vel(3);
     m.chordOf({0, 7, 12, 16}).pattern(0, 2);  // a plain major, strummed upwards
-    compose(m, {AL_BREEZE, 30, 25, 30, AL_VILLAGE, 30, 20, 60, 0, 92, 1});
+    compose(m, {AL_BREEZE, 30, 25, 30, AL_VILLAGE, 30, 20, 60, 0, 92, 1, AL_PATTERN, AL_OPEN});
     all.push_back(m);
   }
   {  // October: leaves falling in the wood. Soft vibes, a little sad.
@@ -159,7 +161,7 @@ std::vector<Month> build() {
     m.op[2] = car(78).ratio(4).env(99, 50, 30, 40, 99, 40, 0, 0).vel(3);
     m.op[3] = mod(40).env(99, 50, 30, 40, 99, 40, 0, 0).vel(3);
     m.chordOf({0, 3, 7, 10}).pattern(1, 2);  // minor seventh, leaves falling
-    compose(m, {AL_BREEZE, 45, 35, 45, AL_FOREST, 40, 30, 35, 25, 80, 1});
+    compose(m, {AL_BREEZE, 45, 35, 45, AL_FOREST, 40, 30, 35, 25, 80, 1, AL_PATTERN});
     all.push_back(m);
   }
   {  // November: mist on the lake. A dark, hollow pad.
@@ -171,7 +173,7 @@ std::vector<Month> build() {
     m.op[2] = car(90).env(58, 30, 30, 35, 99, 95, 92, 0).vel(2);
     m.op[3] = mod(62).env(55, 30, 30, 35, 99, 90, 85, 0).vel(2);
     m.chordOf({-12, 0, 3, 7}).pattern(2, 1);  // low minor, slow
-    compose(m, {AL_FOG, 60, 35, 20, AL_LAKE, 55, 20, 20, 0, 60, 0});
+    compose(m, {AL_FOG, 60, 35, 20, AL_LAKE, 55, 20, 20, 0, 60, 0, AL_SPLIT, AL_WIDE});
     all.push_back(m);
   }
   {  // December: candlelight in a snowy village. A choir with a celesta glint.
@@ -182,7 +184,7 @@ std::vector<Month> build() {
     m.op[2] = car(76).ratio(4).env(99, 40, 30, 45, 99, 50, 0, 0).vel(3);
     m.op[3] = mod(55).ratio(9).env(99, 50, 35, 45, 99, 40, 0, 0).vel(3);
     m.chordOf({0, 7, 11, 16}).pattern(0, 3);  // major seventh, like bells up a tower
-    compose(m, {AL_SNOW, 35, 25, 20, AL_VILLAGE, 50, 15, 75, 20, 88, 3});
+    compose(m, {AL_SNOW, 35, 25, 20, AL_VILLAGE, 50, 15, 75, 20, 88, 3, AL_CHORD, AL_OPEN});
     all.push_back(m);
   }
   for (int i = 0; i < (int)all.size(); i++) all[i].day[AL_MONTH] = i;
