@@ -1,9 +1,9 @@
 import SwiftUI
 
-// One binary, two front ends: the MF-1 emulator, and iScream mode (View › iScream Mode, or
-// --iscream), which is the same engine behind a different face.
-if Engine.isIScream {
-    IScreamApp.main()
-} else {
-    MF1App.main()
+// One binary, three front ends: the MF-1 emulator, iScream mode and Almanac mode (View › iScream Mode
+// or Almanac Mode, or --iscream and --almanac), each the same engine behind a different face.
+switch Engine.mode {
+case .mf1: MF1App.main()
+case .iscream: IScreamApp.main()
+case .almanac: AlmanacApp.main()
 }

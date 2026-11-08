@@ -29,15 +29,24 @@ let package = Package(
                 .unsafeFlags(["-O2"]),
             ]
         ),
+        // Almanac: twelve months as twelve sounds, with their weather, places and moods.
+        .target(
+            name: "AlmanacCore",
+            dependencies: ["MF1Core"],
+            path: "Sources/AlmanacCore",
+            cxxSettings: [
+                .unsafeFlags(["-O2"]),
+            ]
+        ),
         .executableTarget(
             name: "MF1",
-            dependencies: ["MF1Core", "IScreamCore"],
+            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore"],
             path: "Sources/MF1",
             resources: [.copy("Resources/Banks"), .copy("Resources/Fonts")]
         ),
         .executableTarget(
             name: "mf1-render",
-            dependencies: ["MF1Core", "IScreamCore"],
+            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore"],
             path: "Sources/mf1-render"
         ),
     ],

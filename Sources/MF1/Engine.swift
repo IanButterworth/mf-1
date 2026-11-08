@@ -9,20 +9,31 @@ import UniformTypeIdentifiers
 enum Engine {
     // The virtual MIDI port name contains "FM-1" so the existing web
     // librarians and editors, which match ports by that substring, find it.
-    static var portName: String { isIScream ? "iScream (FM-1 Compatible)" : "MF-1 (FM-1 Compatible)" }
+    static var portName: String { "\(mode.title) (FM-1 Compatible)" }
 
-    // iScream mode is picked at launch, because each mode has its own engine state and MIDI port.
-    // Snapshots render MF-1 unless --iscream is given, whatever mode was last used.
-    static let isIScream: Bool = {
+    // One app, three faces: the MF-1 emulator, iScream and Almanac. The mode is picked at launch,
+    // because each has its own engine state and MIDI port. Snapshots render MF-1 unless --iscream
+    // or --almanac is given, whatever mode was last used.
+    enum Mode: String, CaseIterable {
+        case mf1, iscream, almanac
+        var title: String { ["MF-1", "iScream", "Almanac"][Self.allCases.firstIndex(of: self)!] }
+    }
+
+    static let mode: Mode = {
         let args = CommandLine.arguments
-        return args.contains("--iscream")
-            || (!args.contains("--snapshot") && UserDefaults.standard.bool(forKey: "iscreamMode"))
+        if args.contains("--iscream") { return .iscream }
+        if args.contains("--almanac") { return .almanac }
+        if args.contains("--snapshot") { return .mf1 }
+        let d = UserDefaults.standard
+        if let saved = d.string(forKey: "appMode"), let m = Mode(rawValue: saved) { return m }
+        return d.bool(forKey: "iscreamMode") ? .iscream : .mf1
     }()
 
     // Saves the mode and relaunches the app in it.
-    static func switchMode(iScream: Bool) {
-        guard iScream != isIScream else { return }
-        UserDefaults.standard.set(iScream, forKey: "iscreamMode")
+    static func switchMode(to next: Mode) {
+        guard next != mode else { return }
+        UserDefaults.standard.set(next.rawValue, forKey: "appMode")
+        UserDefaults.standard.set(next == .iscream, forKey: "iscreamMode")
         let app = Bundle.main.bundleURL
         guard app.pathExtension == "app" else {
             alert("The mode changes the next time MF-1 starts.")
@@ -39,7 +50,7 @@ enum Engine {
 
     static var stateDirectory: URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let dir = base.appendingPathComponent(isIScream ? "iScream" : "MF-1", isDirectory: true)
+        let dir = base.appendingPathComponent(mode.title, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -49,10 +60,10 @@ enum Engine {
         if mf1_needs_factory() { loadFactoryBanks() }
     }
 
-    // iScream's banks are its flavors, not the factory voices.
-    static func startIScream() {
+    // iScream's and Almanac's banks are their own sounds, not the factory voices.
+    static func startMode(_ install: () -> Void) {
         _ = mf1_start(stateDirectory.path, portName, UserDefaults.standard.string(forKey: "outputUID") ?? "")
-        IScreamModel.shared.start()
+        install()
     }
 
     static func loadFactoryBanks() {

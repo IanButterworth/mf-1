@@ -60,6 +60,16 @@ struct Finish {
                                knobCap: [Color(hex: 0xfff0f8), Color(hex: 0xff8fc8)],
                                knobBump: [Color(hex: 0xffffff), Color(hex: 0xf09bc8)],
                                knobDot: Color(hex: 0xd2227f))
+
+    // Almanac's own finish: an ink-blue case, parchment keys and brass knobs, like an old almanac's cover.
+    static let almanac = Finish(name: "Almanac", caseTop: Color(hex: 0x3a4766), caseBottom: Color(hex: 0x262f47),
+                                keybed: Color(hex: 0xe6dcc4), tray: Color(hex: 0x1f2740),
+                                button: Color(hex: 0x323e5c), legend: Color(hex: 0xf4ecd8), unlitLegend: Color(hex: 0x8e9ab8),
+                                label: Color(hex: 0xe9dfc6), keyLabel: Color(hex: 0x56617e), slit: Color(hex: 0xc4b89c),
+                                knobSkirt: [Color(hex: 0xc9ad6e), Color(hex: 0x7a6334)],
+                                knobCap: [Color(hex: 0xf1e3b8), Color(hex: 0xb8995a)],
+                                knobBump: [Color(hex: 0xfff6dc), Color(hex: 0xa88a4c)],
+                                knobDot: Color(hex: 0x262f47))
 }
 
 extension Color {

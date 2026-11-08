@@ -46,7 +46,7 @@ struct MF1App: App {
                 Toggle("Frameless Window", isOn: applying($frameless) { delegate.setFrameless($0) })
                     .keyboardShortcut("f", modifiers: [.command, .control])
                 Divider()
-                Toggle("iScream Mode", isOn: Binding(get: { false }, set: { Engine.switchMode(iScream: $0) }))
+                ModeToggles()
             }
             CommandMenu("Songs") {
                 SongMenu(model: model)
@@ -369,6 +369,15 @@ enum Snapshot {
 
 // Clicking a key while another app is in front plays it, rather than only
 // bringing the window forward.
+// View › iScream Mode and Almanac Mode, the same in every mode. Turning one off goes back to MF-1.
+struct ModeToggles: View {
+    var body: some View {
+        ForEach([Engine.Mode.iscream, .almanac], id: \.self) { m in
+            Toggle("\(m.title) Mode", isOn: Binding(get: { Engine.mode == m }, set: { Engine.switchMode(to: $0 ? m : .mf1) }))
+        }
+    }
+}
+
 final class PanelHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }

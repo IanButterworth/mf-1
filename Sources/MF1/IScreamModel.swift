@@ -510,7 +510,7 @@ final class IScreamModel: ObservableObject {
     }
 }
 
-extension IScreamModel: PanelDriver {
+extension IScreamModel: ModeModel {
     var labels: PanelLabels {
         PanelLabels(select: "TOPPING", presets: "FLAVOR", algorithm: "SCOOPS")
     }

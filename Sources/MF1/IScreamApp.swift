@@ -31,7 +31,7 @@ struct IScreamApp: App {
                 Toggle("Frameless Window", isOn: applying($frameless) { delegate.setFrameless($0) })
                     .keyboardShortcut("f", modifiers: [.command, .control])
                 Divider()
-                Toggle("iScream Mode", isOn: Binding(get: { true }, set: { Engine.switchMode(iScream: $0) }))
+                ModeToggles()
             }
             CommandMenu("Flavors") { FlavorMenu(model: model) }
             CommandMenu("Device") {
@@ -116,134 +116,16 @@ struct IScreamContentView: View {
     }
 }
 
-final class IScreamDelegate: NSObject, NSApplicationDelegate {
-    private var window: PanelWindow?
-    private var timer: Timer?
-    private var monitor: Any?
-    private var computerKeys: [UInt16: Int] = [:]
-    private var octKeys: [UInt16: Int] = [:]
-    private var seenDown: Set<UInt16> = []
-
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        Engine.startIScream()
-        let model = IScreamModel.shared
-        let w = PanelWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 1180 * PanelMetrics.height / PanelMetrics.width),
-                            styleMask: [.borderless], backing: .buffered, defer: false)
-        w.contentView = PanelHostingView(rootView: IScreamContentView(model: model))
-        w.title = "iScream"
-        w.isMovableByWindowBackground = false
-        w.contentAspectRatio = NSSize(width: PanelMetrics.width, height: PanelMetrics.height)
-        w.isReleasedWhenClosed = false
-        window = w
-        setFrameless(UserDefaults.standard.object(forKey: "frameless") as? Bool ?? true)
-        if !w.setFrameUsingName("IScreamPanel") { w.center() }
-        w.setFrameAutosaveName("IScreamPanel")
-        w.makeKeyAndOrderFront(nil)
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] e in
-            self?.handle(e) == true ? nil : e
-        }
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60, repeats: true) { [weak self] _ in
-            self?.releaseLiftedKeys()
-            IScreamModel.shared.poll()
-        }
-        RunLoop.main.add(timer!, forMode: .common)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            IScreamSnapshot.runIfRequested(model: model)
-            if CommandLine.arguments.contains("--selfcheck") { IScreamSelfCheck.run(model) }
-        }
-    }
-
-    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        IScreamModel.shared.writeNow()
-        return .terminateNow
-    }
-
-    func applicationWillTerminate(_ notification: Notification) { mf1_stop() }
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
-
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        window?.makeKeyAndOrderFront(nil)
-        return false
-    }
-
-    func applicationDidResignActive(_ notification: Notification) {
-        computerKeys.removeAll()
-        octKeys.removeAll()
-        seenDown.removeAll()
-        IScreamModel.shared.releaseAllKeys()
-        IScreamModel.shared.releaseOct()
-        KnobInputView.showCursor()
-    }
-
-    func setFrameless(_ frameless: Bool) {
-        guard let w = window else { return }
-        let frame = w.frame
-        w.styleMask = frameless ? [.borderless, .miniaturizable, .resizable]
-                                : [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
-        if !frameless {
-            w.titlebarAppearsTransparent = true
-            w.titleVisibility = .hidden
-        }
-        w.isOpaque = !frameless
-        w.backgroundColor = frameless ? .clear : NSColor(red: 0.42, green: 0.08, blue: 0.27, alpha: 1)
-        w.hasShadow = true
-        w.setFrame(frame, display: true)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { w.invalidateShadow() }
-    }
-
-    // ---------------------------------------------------------------- Mac keyboard
-
-    @discardableResult
-    private func release(_ code: UInt16) -> Bool {
-        seenDown.remove(code)
-        if let k = computerKeys.removeValue(forKey: code) {
-            IScreamModel.shared.keyUp(k)
-            return true
-        }
-        if let dir = octKeys.removeValue(forKey: code) {
-            IScreamModel.shared.octUp(dir)
-            return true
-        }
-        return false
-    }
-
-    private func releaseLiftedKeys() {
-        for code in Array(computerKeys.keys) + Array(octKeys.keys) {
-            if CGEventSource.keyState(.combinedSessionState, key: code) {
-                seenDown.insert(code)
-            } else if seenDown.contains(code) {
-                release(code)
-            }
-        }
-    }
-
-    private func handle(_ e: NSEvent) -> Bool {
-        let model = IScreamModel.shared
-        let down = e.type == .keyDown
-        if !down && release(e.keyCode) { return true }
-        if e.modifierFlags.contains(.command) { return false }
-        if let dir = AppDelegate.octaveKeys[e.keyCode] {
-            if down && !e.isARepeat && octKeys[e.keyCode] == nil {
-                octKeys[e.keyCode] = dir
-                model.octDown(dir)
-            }
-            return true
-        }
-        guard let semi = AppDelegate.noteKeys[e.keyCode] else { return false }
-        if e.isARepeat { return true }
-        let k: Int
-        if let i = DeviceModel.lowerOffsets.firstIndex(of: semi) {
-            k = i
-        } else if let i = DeviceModel.upperOffsets.firstIndex(of: semi) {
-            k = 16 + i
-        } else {
-            return true
-        }
-        if down {
-            computerKeys[e.keyCode] = k
-            model.keyDown(k)
-        }
-        return true
+final class IScreamDelegate: ModeDelegate {
+    override var model: any ModeModel { IScreamModel.shared }
+    override var title: String { "iScream" }
+    override var frameName: String { "IScreamPanel" }
+    override var titledColor: NSColor { NSColor(red: 0.42, green: 0.08, blue: 0.27, alpha: 1) }
+    override func startEngine() { Engine.startMode { IScreamModel.shared.start() } }
+    override func makeContent() -> NSView { PanelHostingView(rootView: IScreamContentView(model: IScreamModel.shared)) }
+    @MainActor override func launched() {
+        IScreamSnapshot.runIfRequested(model: IScreamModel.shared)
+        if CommandLine.arguments.contains("--selfcheck") { IScreamSelfCheck.run(IScreamModel.shared) }
     }
 }
 

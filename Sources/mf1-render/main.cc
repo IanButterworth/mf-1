@@ -16,6 +16,9 @@ int engineTests();
 int iscreamTests();
 void iscreamReport(int only, int note, int scoops, bool withToppings);
 void iscreamEnvelope(int flavor, int field, int a, int b, int c);
+int almanacTests();
+void almanacReport(int note);
+void almanacWeatherTrace(int sky, int elements);
 
 static const double kRate = 48000;
 static int failures = 0;
@@ -802,7 +805,18 @@ int main(int argc, char** argv) {
     int failed = test();
     failed += engineTests();
     failed += iscreamTests();
+    failed += almanacTests();
     return failed ? 1 : 0;
+  }
+  if (mode == "almanac-weather" && argc >= 5) {
+    almanacWeatherTrace(atoi(argv[3]), atoi(argv[4]));
+    return 0;
+  }
+  if (mode == "almanac-test") return almanacTests() ? 1 : 0;
+  // almanac-report [note]
+  if (mode == "almanac-report") {
+    almanacReport(argc > 3 ? atoi(argv[3]) : 60);
+    return 0;
   }
   // iscream-report [flavor 1-based, 0 for all] [note] [scoops] [toppings 0/1]
   // iscream-env <flavor 1-based> <field> <a> <b> <c>
