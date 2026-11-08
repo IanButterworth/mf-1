@@ -5,7 +5,7 @@ Two things for the M-VAVE FM-1 pocket FM synthesizer, sharing one engine:
 - **The MF-1 app**: a native macOS emulator of the FM-1. It has the same panel, screens, engine and MIDI/SysEx
   behaviour, so patches, librarians and workflows made for the FM-1 work with it. It also has
   [iScream](#iscream), [Almanac](#almanac) and [Woof](#woof) modes.
-- **[iScream, Almanac and Woof firmware](#firmware-for-the-fm-1)**: iScream, Almanac or Woof running on the FM-1 itself, in place
+- **[The modes firmware](#firmware-for-the-fm-1)**: iScream, Almanac and Woof in one firmware on the FM-1 itself, in place
   of M-VAVE's firmware. Their engine renders the same samples as the app.
 
 <p>
@@ -150,15 +150,14 @@ only what a real FM-1 has. See `docs/woof.md`.
 
 ## Firmware for the FM-1
 
-`firmware/iscream` builds iScream as firmware for the real FM-1. It is an app on
+`firmware/fm1-modes` builds one firmware for the real FM-1 with iScream, Almanac and Woof in it. Switch on and the
+last mode used starts; hold a piano key while switching on to choose another. It is an app on
 [fm1-base](https://github.com/charlesvestal/fm1-base) (a git submodule) and felucca-bsp. Its engine is a C port of
-MF-1's, and a parity test checks that it renders the same samples as the app. It has run on one unit: it boots, plays
-and has logged no crash. CPU load, dropouts and output level have not been measured yet. Build and install steps
-are in `firmware/iscream/README.md`; the route and its risks are in `docs/research/fm1-firmware-development.md`.
-
-`firmware/almanac` builds Almanac the same way, on iScream's engine port, with the desktop's own pixel-art scene. It
-runs on one unit too; see `firmware/almanac/README.md`. `firmware/woof` builds Woof the same way, and runs on one unit;
-see `firmware/woof/README.md`.
+MF-1's, and parity tests check that it renders the same samples as the app and that each mode gives the desktop's
+voices and effects. The modes share the engine, the panel code and the screen, so each new one costs little room. It
+has run on one unit: it boots, plays in every mode and has logged no crash. CPU load, dropouts and output level have
+not been measured yet. Build and install steps are in `firmware/fm1-modes/README.md`; the route and its risks are in
+`docs/research/fm1-firmware-development.md`.
 
 Installing firmware on an FM-1 can leave it unable to start. Back up its whole flash first, and keep a rescue
 route at hand. You do this at your own risk. MF-1 provides no M-VAVE firmware: to go back to stock, use M-VAVE's

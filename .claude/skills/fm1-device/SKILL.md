@@ -1,6 +1,6 @@
 ---
 name: fm1-device
-description: Work safely with a real M-VAVE FM-1 over USB - identify what it runs, back up its whole flash, install iScream or any firmware package, check it after an install, recover a unit that will not start, and go back to M-VAVE's stock firmware. Use for anything that reads from or writes to a connected FM-1, including "flash it", "install", "try it on the device", "it won't boot" and "go back to stock".
+description: Work safely with a real M-VAVE FM-1 over USB - identify what it runs, back up its whole flash, install the modes firmware or any firmware package, check it after an install, recover a unit that will not start, and go back to M-VAVE's stock firmware. Use for anything that reads from or writes to a connected FM-1, including "flash it", "install", "try it on the device", "it won't boot" and "go back to stock".
 ---
 
 # The FM-1 on the desk
@@ -18,7 +18,7 @@ bricked units with exactly these tools. Everything below is about never being on
    repo under `~/Documents/GitHub/mf-1-ref/fm1-backups/` with the date and what the unit ran. Never commit a
    backup or any M-VAVE image: they hold M-VAVE's firmware and the owner's data.
 3. **The right port.** fm1-base's tools pick a MIDI port whose name contains "FM-1". MF-1's own virtual port is
-   "MF-1 (FM-1 Compatible)", and iScream's desktop mode "iScream (FM-1 Compatible)": quit MF-1 before any device
+   "MF-1 (FM-1 Compatible)", and its modes' ports "iScream (FM-1 Compatible)", "Almanac (FM-1 Compatible)" and "Woof (FM-1 Compatible)": quit MF-1 before any device
    tool, then confirm with `--info` that the answer is the hardware. Pass `--port` when in doubt. No DAW or editor
    may send MIDI to the FM-1 during an install.
 4. **Power.** The FM-1 on USB, battery charged, the cable not touched until the tool reports the new identity.
@@ -31,9 +31,9 @@ From `firmware/fm1-base`, with `PY=~/.fm1-venv/bin/python` (set up by the fm1-fi
 
 | Command | What |
 | --- | --- |
-| `$PY tools/fm1_install.py --info` | What runs: identity (`FM-1_015` is stock V15, `FM-1_47..` iScream), read only |
+| `$PY tools/fm1_install.py --info` | What runs: identity (`FM-1_015` is stock V15 or TransitFM1, `FM-1_50..` the modes firmware), read only |
 | `$PY tools/fm1_install.py PACKAGE.fwsc` | Install; asks on the terminal unless `--yes`; resumes a cut-off install |
-| `$PY tools/fm1_remote.py screen` / `log` / `crashes --elf ../iscream/build/iscream.elf` | Read a running fm1-base firmware: its screen in words, the last crash with registers, the crash history with symbols |
+| `$PY tools/fm1_remote.py screen` / `log` / `crashes --elf ../fm1-modes/build/modes.elf` | Read a running fm1-base firmware: its screen in words, the last crash with registers, the crash history with symbols |
 | `bsp/tools/fm1_rescue.py` (sudo, pyusb) | ROM boot: checks the chip and flash, backs up the whole flash, writes only with `--write` |
 
 Exit codes of `fm1_install.py`: 0 done, 3 not found, 4 connection lost, 5 timeout, 6 wrong model or identity. On
@@ -65,24 +65,24 @@ Exit codes of `fm1_install.py`: 0 done, 3 not found, 4 connection lost, 5 timeou
 
 ## The install route
 
-V16 -> V15 -> TransitFM1 -> iScream, each arrow one confirmed write.
+V16 -> V15 -> TransitFM1 -> the modes firmware, each arrow one confirmed write.
 
 - **From V16**: back to V15 with M-VAVE's own updater (M-UPGRADE). V16 brings its own boot area, which only
   M-VAVE's tools change; no community installer goes from V16.
 - **V15 -> TransitFM1** (github.com/Quixotic7/TransitFM1, 0.1.4+): the riskiest hop, once per unit. Check the
   package against the SHA-256 its site publishes.
-- **TransitFM1 -> iScream**: TransitFM1's loader writes iScream's first sector last, so a cut-off install comes back
-  in update mode. Install `firmware/iscream/build/iscream.fwsc` with `fm1_install.py` (or TransitFM1's web
+- **TransitFM1 -> the modes firmware**: TransitFM1's loader writes its first sector last, so a cut-off install comes back
+  in update mode. Install `firmware/fm1-modes/build/modes.fwsc` with `fm1_install.py` (or TransitFM1's web
   installer).
-- **iScream -> a newer iScream**: fm1-base's loader resumes a cut-off install, but writes in address order. While
+- **The modes firmware -> a newer one**: fm1-base's loader resumes a cut-off install, but writes in address order. While
   the firmware is young, go back through TransitFM1 for each update.
 
 Before asking for the yes, show: `--info` output, the package path, `shasum -a 256` of it, its identity, and the
 route step. After the install: `--info` must give the new identity, then `fm1_remote.py screen` and `log`.
 
-## After installing iScream
+## After installing the modes firmware
 
-- `fm1_remote.py screen` should read the iScream screen; `log` shows the supplies and any crash.
+- `fm1_remote.py screen` should read the running mode's screen; `log` shows the supplies and any crash.
 - Play a few keys and chords; watch for crashes (`crashes --elf ...`) and for xruns, which mean the engine is
   over its CPU budget. A crash or a black screen: go to "Back to stock" before anything else.
 - Record what was seen (CPU, sound, screen) in `docs/research/fm1-firmware-development.md`.

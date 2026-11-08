@@ -101,8 +101,8 @@ comes from the inharmonic sidebands round the fixed mouth and from feedback on t
 
 ## On the FM-1
 
-`firmware/woof` builds Woof as firmware for the FM-1, on iScream's port of the engine. Its bark mapping is a C port
-of WoofCore, which `firmware/woof/tests/run_parity.sh` checks gives the desktop's voice bytes, effects, repeat
+Woof is one of the modes of the FM-1 firmware in `firmware/fm1-modes` (hold a piano key at power-on and press A).
+Its bark mapping, in `firmware/woof`, is a C port of WoofCore, which `firmware/woof/tests/run_parity.sh` checks gives the desktop's voice bytes, effects, repeat
 settings and key notes for every value of every field. Repeats and chases play on the same arpeggiator port as
 Almanac's patterns. The battery bars show the FM-1's own reading. It runs on one unit: it boots, plays and logged no
 crash. CPU load and the repeats' timing on the hardware are not measured yet.

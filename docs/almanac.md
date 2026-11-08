@@ -87,8 +87,8 @@ Mountains (hall, a long echo off the far side), Coast (wide and slow), Lake (a b
 
 ## On the FM-1
 
-`firmware/almanac` builds Almanac as firmware for the FM-1, on iScream's port of the engine. Its sound mapping is a C
-port of AlmanacCore, which `firmware/almanac/tests/run_parity.sh` checks gives the desktop's voice bytes, effects,
+Almanac is one of the modes of the FM-1 firmware in `firmware/fm1-modes` (hold a piano key at power-on and press G).
+Its sound mapping, in `firmware/almanac`, is a C port of AlmanacCore, which `firmware/almanac/tests/run_parity.sh` checks gives the desktop's voice bytes, effects,
 pattern settings and key notes for every value of every field. Patterns play on a port of MF-1's arpeggiator in the
 audio interrupt, since the firmware's engine has none. It runs on one unit: it boots, plays and logged no crash. CPU
 load and the pattern's timing on the hardware are not measured yet.

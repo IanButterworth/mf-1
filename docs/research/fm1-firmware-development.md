@@ -79,6 +79,25 @@ The firmware does not use M-VAVE's engine. It ports MF-1's msfa core and effects
 MF-1 in Faithful mode, not literally like the stock V15 firmware. Where the two differ is listed in
 `fm1-protocol-and-engine.md` §2.
 
+### One firmware for every mode (2026-11-08)
+
+Almanac (`FM-1_4800`) and then Woof (`FM-1_4900`) each ran on the unit as apps of their own, every install going
+through TransitFM1. They are now modes of one firmware, `firmware/fm1-modes` (`FM-1_5000`), with iScream:
+- A piano key held at power-on brings up a chooser. fm1-base reads the buttons at power-on (REC for the chip's update
+  mode, OCT- with OCT+ for panel set-up) but none of the keys, so the keys are safe for this. The choice is made in
+  the app's boot hook (`APP_BOOT`), once the keys are scanned.
+- The last mode used is saved, and each mode's settings live in a store object of their own.
+- The modes share the engine, one scene buffer and the panel code: the three need a 211 KB image and 83 KB of RAM,
+  against 156, 153 and 167 KB and up to 81 KB apart. Every package is 614,938 bytes whatever it holds, a fixed slot.
+- Installed through TransitFM1 twice, two modes then three: both boot, play every mode and logged no crash. Right
+  after the second install the Mac's MIDI service failed to create a client (CoreMIDI `-304`) and saw no MIDI
+  devices at all, though the FM-1 itself was running and working.
+
+A factory mode beside them was considered and left out: M-VAVE's V15 package alone is about 700 KB of the 1 MiB
+flash, it expects to own the chip from a fixed address with its own boot area, and choosing between it and an
+fm1-base firmware would need a chainloader at the start of flash, the kind of write that bricks a unit when it goes
+wrong.
+
 ## Sources
 
 - awesome-fm-1: https://github.com/cicloid/awesome-fm-1 (index; recovery and development sections)

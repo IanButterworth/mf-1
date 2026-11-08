@@ -128,14 +128,16 @@ Licences matter when reading community code:
   `woof_tests.cc`), benchmark
   and WAV rendering through the offline C API.
 - `docs/research/`: the specs the emulation is built from.
-- `firmware/iscream`: iScream as firmware for the real FM-1, on fm1-base (`firmware/fm1-base`, a submodule). Its
-  engine is a C port of MF-1's, kept bit for bit equal by `firmware/iscream/tests/run_parity.sh`; a change to
-  MF1Core's msfa code or to IScreamCore's flavors needs the parity test too. `firmware/almanac` is Almanac on the same
-  engine; a change to AlmanacCore (months, skies, mapping or scene.c) needs `firmware/almanac/tools/gen_months.sh`
-  and `firmware/almanac/tests/run_parity.sh`. `firmware/woof` is Woof on the same engine; a change to WoofCore
-  (dogs, mapping or scene.c) needs `firmware/woof/tools/gen_dogs.sh` and `firmware/woof/tests/run_parity.sh`. Build
-  and test them with the
-  `fm1-firmware` skill. Anything that touches a connected FM-1 goes through the `fm1-device` skill, which asks
+- `firmware/fm1-modes`: one firmware for the real FM-1 holding iScream, Almanac and Woof, chosen at power-on, on
+  fm1-base (`firmware/fm1-base`, a submodule). A shared core runs each mode through the interface in `mode.h`; each
+  mode's panel and screen is `modes/NAME.c`. Its sound comes from the modes' C ports:
+  - `firmware/iscream`: the engine, a C port of MF-1's kept bit for bit equal by `tests/run_parity.sh`, and
+    iScream's recipes. A change to MF1Core's msfa code or to IScreamCore's flavors needs the parity test too.
+  - `firmware/almanac`: a change to AlmanacCore (months, skies, mapping or scene.c) needs `tools/gen_months.sh` and
+    `tests/run_parity.sh`.
+  - `firmware/woof`: a change to WoofCore (dogs, mapping or scene.c) needs `tools/gen_dogs.sh` and
+    `tests/run_parity.sh`.
+  Build and test it with the `fm1-firmware` skill. Anything that touches a connected FM-1 goes through the `fm1-device` skill, which asks
   before every write.
 
 ## Build and test
