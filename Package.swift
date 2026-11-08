@@ -38,15 +38,24 @@ let package = Package(
                 .unsafeFlags(["-O2"]),
             ]
         ),
+        // Woof: a dog show, every key a bark.
+        .target(
+            name: "WoofCore",
+            dependencies: ["MF1Core"],
+            path: "Sources/WoofCore",
+            cxxSettings: [
+                .unsafeFlags(["-O2"]),
+            ]
+        ),
         .executableTarget(
             name: "MF1",
-            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore"],
+            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore"],
             path: "Sources/MF1",
             resources: [.copy("Resources/Banks"), .copy("Resources/Fonts")]
         ),
         .executableTarget(
             name: "mf1-render",
-            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore"],
+            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore"],
             path: "Sources/mf1-render"
         ),
     ],

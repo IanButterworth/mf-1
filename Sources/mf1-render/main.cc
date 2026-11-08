@@ -19,6 +19,10 @@ void iscreamEnvelope(int flavor, int field, int a, int b, int c);
 int almanacTests();
 void almanacReport(int note);
 void almanacWeatherTrace(int sky, int elements);
+int woofTests();
+void woofReport(int note);
+void woofWav(int dog, const char* path, int note, int argc, char** argv);
+void woofSceneSheet(const char* path, int place, int bark, int step);
 
 static const double kRate = 48000;
 static int failures = 0;
@@ -806,6 +810,7 @@ int main(int argc, char** argv) {
     failed += engineTests();
     failed += iscreamTests();
     failed += almanacTests();
+    failed += woofTests();
     return failed ? 1 : 0;
   }
   if (mode == "almanac-weather" && argc >= 5) {
@@ -813,6 +818,20 @@ int main(int argc, char** argv) {
     return 0;
   }
   if (mode == "almanac-test") return almanacTests() ? 1 : 0;
+  if (mode == "woof-test") return woofTests() ? 1 : 0;
+  // woof-report [note]; woof-wav <dog 1-based> <out.wav> <note> [field=value ...]
+  if (mode == "woof-report") {
+    woofReport(argc > 3 ? atoi(argv[3]) : 66);
+    return 0;
+  }
+  if (mode == "woof-scene" && argc >= 4) {
+    woofSceneSheet(argv[3], argc > 4 ? atoi(argv[4]) : -1, argc > 5 ? atoi(argv[5]) : 0, argc > 6 ? atoi(argv[6]) : 0);
+    return 0;
+  }
+  if (mode == "woof-wav" && argc >= 6) {
+    woofWav(atoi(argv[3]) - 1, argv[4], atoi(argv[5]), argc - 6, argv + 6);
+    return 0;
+  }
   // almanac-report [note]
   if (mode == "almanac-report") {
     almanacReport(argc > 3 ? atoi(argv[3]) : 60);

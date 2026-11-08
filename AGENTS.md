@@ -111,23 +111,30 @@ Licences matter when reading community code:
   the song library and the audio output list.
   - `PanelView` is generic over `PanelDriver` (`PanelDriver.swift`): `DeviceModel` drives MF-1,
     `IScreamModel` drives iScream. Anything new that the panel needs from its model goes on the protocol.
-  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`) and Almanac are modes of the same app (View › iScream
-    Mode or Almanac Mode, or `--iscream` and `--almanac`), picked at launch; `main.swift` picks the front end. Keep MF-1's behaviour unchanged when editing shared panel code,
+  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`), Almanac and Woof are modes of the same app (View ›
+    iScream Mode, Almanac Mode or Woof Mode, or `--iscream`, `--almanac` and `--woof`), picked at launch; `main.swift` picks the front end. Keep MF-1's behaviour unchanged when editing shared panel code,
     and check both with `--snapshot`.
 - `Sources/IScreamCore` (C++17): iScream's flavors, how a sundae becomes an FM-1 voice and effects. It
   uses only the public C API and only what a real FM-1 has (see `docs/iscream.md`).
 - `Sources/AlmanacCore` (C++17 and C): Almanac's months, how a day becomes an FM-1 voice, effects and the notes a
   key plays, and `scene.c`, the pixel-art scene in plain C for a later firmware (see `docs/almanac.md`). Almanac's
   front end is `AlmanacModel`, `AlmanacScreen` and `AlmanacApp`; `ModeApp.swift` holds the window and keyboard code
-  iScream and Almanac share.
-- `Sources/mf1-render`: headless checks (`main.cc`, `tests_engine.cc`, `iscream_tests.cc`), benchmark
+  iScream, Almanac and Woof share.
+- `Sources/WoofCore` (C++17 and C): Woof's dogs, how a breed's settings become an FM-1 bark (throat, fixed-frequency
+  mouth and breath stacks, with a pitch envelope), effects and the notes a key plays, and `scene.c`, the dog cartoon
+  in plain C (see `docs/woof.md`). Its front end is `WoofModel`, `WoofScreen` and `WoofApp`; its spotted case is
+  `Finish.woof`.
+- `Sources/mf1-render`: headless checks (`main.cc`, `tests_engine.cc`, `iscream_tests.cc`, `almanac_tests.cc`,
+  `woof_tests.cc`), benchmark
   and WAV rendering through the offline C API.
 - `docs/research/`: the specs the emulation is built from.
 - `firmware/iscream`: iScream as firmware for the real FM-1, on fm1-base (`firmware/fm1-base`, a submodule). Its
   engine is a C port of MF-1's, kept bit for bit equal by `firmware/iscream/tests/run_parity.sh`; a change to
   MF1Core's msfa code or to IScreamCore's flavors needs the parity test too. `firmware/almanac` is Almanac on the same
   engine; a change to AlmanacCore (months, skies, mapping or scene.c) needs `firmware/almanac/tools/gen_months.sh`
-  and `firmware/almanac/tests/run_parity.sh`. Build and test it with the
+  and `firmware/almanac/tests/run_parity.sh`. `firmware/woof` is Woof on the same engine; a change to WoofCore
+  (dogs, mapping or scene.c) needs `firmware/woof/tools/gen_dogs.sh` and `firmware/woof/tests/run_parity.sh`. Build
+  and test them with the
   `fm1-firmware` skill. Anything that touches a connected FM-1 goes through the `fm1-device` skill, which asks
   before every write.
 

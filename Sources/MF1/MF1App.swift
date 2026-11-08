@@ -369,10 +369,10 @@ enum Snapshot {
 
 // Clicking a key while another app is in front plays it, rather than only
 // bringing the window forward.
-// View › iScream Mode and Almanac Mode, the same in every mode. Turning one off goes back to MF-1.
+// View › iScream Mode, Almanac Mode and Woof Mode, the same in every mode. Turning one off goes back to MF-1.
 struct ModeToggles: View {
     var body: some View {
-        ForEach([Engine.Mode.iscream, .almanac], id: \.self) { m in
+        ForEach([Engine.Mode.iscream, .almanac, .woof], id: \.self) { m in
             Toggle("\(m.title) Mode", isOn: Binding(get: { Engine.mode == m }, set: { Engine.switchMode(to: $0 ? m : .mf1) }))
         }
     }

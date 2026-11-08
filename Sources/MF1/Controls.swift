@@ -23,6 +23,8 @@ struct Finish {
     var knobCap: [Color] = [Color(hex: 0x3b3b3d), Color(hex: 0x161617)]
     var knobBump: [Color] = [Color(hex: 0x666668), Color(hex: 0x262627)]
     var knobDot: Color = .white
+    // Spots printed over the case, for Woof.
+    var spots: Color? = nil
 
     static let black = Finish(name: "Black", caseTop: Color(hex: 0x323234), caseBottom: Color(hex: 0x252527),
                               keybed: Color(hex: 0x2b2b2d), tray: Color(hex: 0x29292b),
@@ -70,6 +72,16 @@ struct Finish {
                                 knobCap: [Color(hex: 0xf1e3b8), Color(hex: 0xb8995a)],
                                 knobBump: [Color(hex: 0xfff6dc), Color(hex: 0xa88a4c)],
                                 knobDot: Color(hex: 0x262f47))
+
+    // Woof's own finish: a white coat with black spots, black keys and red buttons, like a collar.
+    static let woof = Finish(name: "Woof", caseTop: Color(hex: 0xfbf9f4), caseBottom: Color(hex: 0xebe6dc),
+                             keybed: Color(hex: 0x242424), tray: Color(hex: 0x1c1c1c),
+                             button: Color(hex: 0xd3282e), legend: Color(hex: 0xffffff), unlitLegend: Color(hex: 0xf3b8ba),
+                             label: Color(hex: 0x1c1c1c), keyLabel: Color(hex: 0xcfcfcf), slit: Color(hex: 0x4a4a4a),
+                             knobSkirt: [Color(hex: 0x3a3a3a), Color(hex: 0x111111)],
+                             knobCap: [Color(hex: 0xffffff), Color(hex: 0xdcd8d0)],
+                             knobBump: [Color(hex: 0xffffff), Color(hex: 0xbdb8ae)],
+                             knobDot: Color(hex: 0xd3282e), spots: Color(hex: 0x1c1c1c))
 }
 
 extension Color {

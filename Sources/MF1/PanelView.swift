@@ -296,6 +296,9 @@ struct CaseView: View, Equatable {
             }
             RoundedRectangle(cornerRadius: 9 * s)
                 .fill(LinearGradient(colors: [finish.caseTop, finish.caseBottom], startPoint: .top, endPoint: .bottom))
+            if let spots = finish.spots {
+                SpotsView(color: spots).clipShape(RoundedRectangle(cornerRadius: 9 * s)).allowsHitTesting(false)
+            }
             if !Snapshot.active {
                 WindowDragArea().clipShape(RoundedRectangle(cornerRadius: 9 * s))
             }
@@ -319,6 +322,34 @@ struct CaseView: View, Equatable {
             .allowsHitTesting(false)
         }
         .frame(width: PanelMetrics.width * s, height: PanelMetrics.height * s)
+    }
+}
+
+// Irregular round spots scattered over the case, from a fixed seed so they never move.
+struct SpotsView: View {
+    var color: Color
+
+    var body: some View {
+        Canvas { ctx, size in
+            var seed: UInt64 = 0xD1B54A32D192ED03
+            func next() -> CGFloat {
+                seed = seed &* 6364136223846793005 &+ 1442695040888963407
+                return CGFloat(seed >> 40) / CGFloat(1 << 24)
+            }
+            let unit = size.width / 180
+            for _ in 0..<48 {
+                let c = CGPoint(x: next() * size.width, y: next() * size.height)
+                let r = unit * (0.6 + next() * next() * 2.0)
+                // Each spot is a few overlapping blobs, so the edges are uneven like a real coat.
+                for k in 0..<3 {
+                    let a = next() * 2 * .pi, d = r * 0.35 * CGFloat(k)
+                    let rr = r * (1 - 0.18 * CGFloat(k)) * (0.85 + next() * 0.3)
+                    let p = CGPoint(x: c.x + cos(a) * d, y: c.y + sin(a) * d)
+                    ctx.fill(Path(ellipseIn: CGRect(x: p.x - rr, y: p.y - rr * 0.9, width: rr * 2, height: rr * 1.8)),
+                             with: .color(color))
+                }
+            }
+        }
     }
 }
 

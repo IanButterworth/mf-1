@@ -11,18 +11,19 @@ enum Engine {
     // librarians and editors, which match ports by that substring, find it.
     static var portName: String { "\(mode.title) (FM-1 Compatible)" }
 
-    // One app, three faces: the MF-1 emulator, iScream and Almanac. The mode is picked at launch,
-    // because each has its own engine state and MIDI port. Snapshots render MF-1 unless --iscream
-    // or --almanac is given, whatever mode was last used.
+    // One app, four faces: the MF-1 emulator, iScream, Almanac and Woof. The mode is picked at launch,
+    // because each has its own engine state and MIDI port. Snapshots render MF-1 unless --iscream,
+    // --almanac or --woof is given, whatever mode was last used.
     enum Mode: String, CaseIterable {
-        case mf1, iscream, almanac
-        var title: String { ["MF-1", "iScream", "Almanac"][Self.allCases.firstIndex(of: self)!] }
+        case mf1, iscream, almanac, woof
+        var title: String { ["MF-1", "iScream", "Almanac", "Woof"][Self.allCases.firstIndex(of: self)!] }
     }
 
     static let mode: Mode = {
         let args = CommandLine.arguments
         if args.contains("--iscream") { return .iscream }
         if args.contains("--almanac") { return .almanac }
+        if args.contains("--woof") { return .woof }
         if args.contains("--snapshot") { return .mf1 }
         let d = UserDefaults.standard
         if let saved = d.string(forKey: "appMode"), let m = Mode(rawValue: saved) { return m }
@@ -60,7 +61,7 @@ enum Engine {
         if mf1_needs_factory() { loadFactoryBanks() }
     }
 
-    // iScream's and Almanac's banks are their own sounds, not the factory voices.
+    // iScream's, Almanac's and Woof's banks are their own sounds, not the factory voices.
     static func startMode(_ install: () -> Void) {
         _ = mf1_start(stateDirectory.path, portName, UserDefaults.standard.string(forKey: "outputUID") ?? "")
         install()
