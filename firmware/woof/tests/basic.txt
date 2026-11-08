@@ -1,0 +1,79 @@
+# Woof in fm1-base's host simulator: tools/build.py ../woof --host (from fm1-base), then
+#   ../woof/build/host/woof_host ../woof/tests/basic.txt OUT_DIR
+wait 600
+expect dog 0
+expect page 0
+expect battery 3
+expect low_battery 0
+shot boot.png
+# The Dalmatian barks once on each key.
+key 7 down
+wait 120
+expect notes 1
+expect voices 1
+shot barking.png
+key 7 up
+wait 30
+expect notes 0
+# The Labrador barks again and again while a key is held.
+turn PRESET 1
+wait 50
+expect dog 1
+expect play 1
+key 7 down
+wait 1200
+expect arp 1
+expect arp_notes 1
+key 7 up
+wait 30
+expect arp 0
+turn ALGO 1
+wait 50
+expect place 1
+press ENV
+release ENV
+wait 30
+expect page 3
+# A chorus: the pack of two on one key.
+turn K1 1
+wait 30
+expect play 2
+key 7 down
+wait 120
+expect notes 2
+shot chorus.png
+key 7 up
+wait 30
+press EDIT
+release EDIT
+wait 30
+expect pack 1
+press SAVE
+wait 900
+release SAVE
+wait 30
+expect play 1
+expect place 0
+expect pack 0
+# Otto, the thirteenth dog.
+turn PRESET 11
+wait 50
+expect dog 12
+shot otto.png
+# A dog show brings on the next dog every ten seconds.
+press GLO
+release GLO
+wait 30
+expect show 1
+wait 10300
+expect dog 0
+press GLO
+release GLO
+wait 30
+expect show 0
+wait 5000
+expect dirty 0
+reboot
+wait 600
+expect dog 0
+expect show 0

@@ -67,6 +67,14 @@ Run all three after any change under `firmware/`, and the MF-1 suite too when `S
 `dsp/months.inc`, `dsp/scene.c` and `dsp/AlmanacCore.h` come from `Sources/AlmanacCore` by
 `tools/gen_months.sh`: rerun it after any change there, never edit them by hand.
 
+## Woof
+
+`firmware/woof` is a third app on the same engine, checked the same way: `firmware/woof/tests/run_parity.sh`, the
+host simulator with `tests/basic.txt` (and `WOOF_BATTERY=0` with `tests/battery.txt`), and the device build
+(`build/woof.fwsc`, identity `FM-1_4900`). `dsp/dogs.inc`, `dsp/scene.c` and `dsp/WoofCore.h` come from
+`Sources/WoofCore` by `tools/gen_dogs.sh`: rerun it after any change there, never edit them by hand. Its scene is
+120x64, so its RAM is about 81 KB of 98 KB, against Almanac's 57 KB: watch the margin.
+
 ## Rules the device build enforces, and some it does not
 
 - No C library headers on the device: use `dsp/isc_libc.h`. No `double`, no libm (fm1-base's `fastmath.h`).
