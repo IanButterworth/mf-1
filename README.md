@@ -19,9 +19,9 @@ Two things for the M-VAVE FM-1 pocket FM synthesizer, sharing one engine:
 Download `MF-1-<version>.dmg` from the GitHub releases, open it and drag MF-1 to Applications.
 The app runs on Apple silicon and Intel Macs with macOS 14 or later.
 
-If macOS says it cannot check the app for malicious software, the release is ad-hoc signed rather than
-notarised. Try to open MF-1 once, then open System Settings › Privacy & Security and click Open Anyway beside
-MF-1. Alternatively, run `xattr -dr com.apple.quarantine /Applications/MF-1.app`.
+Releases from 1.6.0 are signed and notarised by Apple, so they open like any other app. Older releases were
+ad-hoc signed: if macOS says it cannot check one for malicious software, try to open it once, then click Open
+Anyway in System Settings › Privacy & Security.
 
 MF-1 updates itself: from 1.6.0 it checks GitHub for a new release once a day (it asks first), and MF-1 › Check
 for Updates… checks at once.
