@@ -18,7 +18,7 @@ bricked units with exactly these tools. Everything below is about never being on
    repo under `~/Documents/GitHub/mf-1-ref/fm1-backups/` with the date and what the unit ran. Never commit a
    backup or any M-VAVE image: they hold M-VAVE's firmware and the owner's data.
 3. **The right port.** fm1-base's tools pick a MIDI port whose name contains "FM-1". MF-1's own virtual port is
-   "MF-1 (FM-1 Compatible)", and its modes' ports "iScream (FM-1 Compatible)", "Almanac (FM-1 Compatible)" and "Woof (FM-1 Compatible)": quit MF-1 before any device
+   "MF-1 (FM-1 Compatible)", and its modes' ports "iScream (FM-1 Compatible)", "Almanac (FM-1 Compatible)", "Woof (FM-1 Compatible)" and "Phase (FM-1 Compatible)": quit MF-1 before any device
    tool, then confirm with `--info` that the answer is the hardware. Pass `--port` when in doubt. No DAW or editor
    may send MIDI to the FM-1 during an install.
 4. **Power.** The FM-1 on USB, battery charged, the cable not touched until the tool reports the new identity.

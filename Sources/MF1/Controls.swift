@@ -25,6 +25,8 @@ struct Finish {
     var knobDot: Color = .white
     // Spots printed over the case, for Woof.
     var spots: Color? = nil
+    // A colour that picks out the PLAY/STOP button alone, for Phase.
+    var playButton: Color? = nil
 
     static let black = Finish(name: "Black", caseTop: Color(hex: 0x323234), caseBottom: Color(hex: 0x252527),
                               keybed: Color(hex: 0x2b2b2d), tray: Color(hex: 0x29292b),
@@ -82,6 +84,16 @@ struct Finish {
                              knobCap: [Color(hex: 0xffffff), Color(hex: 0xdcd8d0)],
                              knobBump: [Color(hex: 0xffffff), Color(hex: 0xbdb8ae)],
                              knobDot: Color(hex: 0xd3282e), spots: Color(hex: 0x1c1c1c))
+
+    // Phase's own finish: a paper-white case printed in black, black keys, knobs and buttons, and one red button.
+    static let phase = Finish(name: "Phase", caseTop: Color(hex: 0xf1efe9), caseBottom: Color(hex: 0xe4e1d9),
+                              keybed: Color(hex: 0x1d1d1d), tray: Color(hex: 0x141414),
+                              button: Color(hex: 0x1d1d1d), legend: Color(hex: 0xffffff), unlitLegend: Color(hex: 0x8c8c8c),
+                              label: Color(hex: 0x111111), keyLabel: Color(hex: 0xbdbdbd), slit: Color(hex: 0x3c3c3c),
+                              knobSkirt: [Color(hex: 0x383838), Color(hex: 0x0c0c0c)],
+                              knobCap: [Color(hex: 0x2c2c2c), Color(hex: 0x0e0e0e)],
+                              knobBump: [Color(hex: 0x505050), Color(hex: 0x181818)],
+                              knobDot: Color(hex: 0xd7261e), playButton: Color(hex: 0xd7261e))
 }
 
 extension Color {
@@ -280,13 +292,14 @@ struct PanelButton: View {
 
     var body: some View {
         let r = size.height * 0.18
+        let face = label == "PLAY/STOP" ? finish.playButton ?? finish.button : finish.button
         ZStack {
             RoundedRectangle(cornerRadius: r)
                 .fill(Color.black.opacity(0.6))
                 .offset(y: down ? size.height * 0.02 : size.height * 0.06)
                 .blur(radius: size.height * 0.04)
             RoundedRectangle(cornerRadius: r)
-                .fill(LinearGradient(colors: [finish.button.opacity(1).lighter(0.06), finish.button],
+                .fill(LinearGradient(colors: [face.opacity(1).lighter(0.06), face],
                                      startPoint: .top, endPoint: .bottom))
                 .overlay(RoundedRectangle(cornerRadius: r).stroke(Color.white.opacity(0.06), lineWidth: 0.6))
                 .scaleEffect(down ? 0.97 : 1)
@@ -328,7 +341,8 @@ struct PanelButton: View {
     }
 
     @ViewBuilder private var legend: some View {
-        let color = lit ?? finish.unlitLegend
+        let picked = label == "PLAY/STOP" && finish.playButton != nil
+        let color = lit ?? (picked ? Color.white.opacity(0.72) : finish.unlitLegend)
         let glow = lit != nil
         if label == "PLAY/STOP" {
             VStack(spacing: fontSize * 0.12) {

@@ -51,16 +51,25 @@ let package = Package(
                 .unsafeFlags(["-O2"]),
             ]
         ),
+        // Phase: process music, a short cell becoming two or more parts that drift and lock.
+        .target(
+            name: "PhaseCore",
+            dependencies: ["MF1Core"],
+            path: "Sources/PhaseCore",
+            cxxSettings: [
+                .unsafeFlags(["-O2"]),
+            ]
+        ),
         .executableTarget(
             name: "MF1",
-            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore",
+            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore", "PhaseCore",
                            .product(name: "Sparkle", package: "Sparkle")],
             path: "Sources/MF1",
             resources: [.copy("Resources/Banks"), .copy("Resources/Fonts")]
         ),
         .executableTarget(
             name: "mf1-render",
-            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore"],
+            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore", "PhaseCore"],
             path: "Sources/mf1-render"
         ),
     ],

@@ -171,6 +171,30 @@ static void engine_note(int note, int on)
     plat_unlock(f);
 }
 
+/* For a mode that plays notes of its own: how many hold each note, the keys and the mode's parts together, and the
+ * mode's player, which the start of the mode hands the audio interrupt. Only the interrupt counts. */
+static uint8_t note_holds[128];
+static void (*volatile mode_block)(void);
+
+static int md_refs(int note) { return note_holds[note & 127]; }
+
+/* One more holder of a note. A note no one held always sounds; strike sounds a held one again. */
+static void md_hold(int note, int strike)
+{
+    note &= 127;
+    if (strike || note_holds[note] == 0)
+        isc_synth_note_on(note, KEY_VELOCITY);
+    if (note_holds[note] < 255)
+        note_holds[note]++;
+}
+
+static void md_let_go(int note)
+{
+    note &= 127;
+    if (note_holds[note] && --note_holds[note] == 0)
+        isc_synth_note_off(note);
+}
+
 /* The arpeggiator player: MF-1's arpeggiator, run by the audio interrupt on the engine's 64-sample blocks. Held notes
  * go to it instead of the voices while a repeat, chase or pattern plays; the first step is at once, and each note is released at
  * the gate, a block early, so the release never lands after the block the next step fires in. */
@@ -341,6 +365,7 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
 {
     float gain = (float)master_q12 / 4096.f * 8388607.f, pk = 0;
     uint32_t i = 0, k;
+    void (*block)(void) = mode_block;
     if (pend_panic) {
         arp_reset();
         isc_synth_all_notes_off();
@@ -362,13 +387,22 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     }
     while (note_tail != note_head) {
         uint16_t e = note_ring[note_tail & 63u];
-        play_note(e & 0x7F, (e & 0x100u) != 0);
+        if (block && !arp.cfg.on) {
+            if (e & 0x100u)
+                md_hold(e & 0x7F, 1);
+            else
+                md_let_go(e & 0x7F);
+        } else {
+            play_note(e & 0x7F, (e & 0x100u) != 0);
+        }
         note_tail++;
     }
     midi_in();
     while (i < n) {
         float x[FM_N];
         arp_block();
+        if (block)
+            block();
         isc_synth_block(x);
         for (k = 0; k < FM_N && i < n; k++, i++) {
             float s = x[k];
@@ -648,6 +682,8 @@ static void lights(void)
         if (page_for_button(b) == page)
             lit |= 1u << b;
     dim = M->dim();
+    if (M->lit)
+        lit |= M->lit();
     if (octave < 0)
         lit |= 1u << B_OCTDN;
     if (octave > 0)
@@ -679,6 +715,13 @@ typedef struct {
     uint8_t rows[MD_ITEMS][MD_FIELDS];
 } stored_t;
 
+/* The object as it is loaded and saved: a mode's further state follows the rows, so a mode without any keeps the size
+ * it always had. */
+static struct {
+    stored_t st;
+    uint8_t more[MD_MORE_MAX];
+} store_buf;
+
 static uint32_t last_mode;
 
 static void load_global(void)
@@ -691,26 +734,29 @@ static void load_global(void)
 
 static void load_mode(void)
 {
-    static stored_t st;
+    stored_t *const st = &store_buf.st;
+    uint32_t size = sizeof(stored_t) + M->more_len;
     int n = M->count(), it, i;
     for (it = 0; it < n; it++)
         M->defaults(it, table[it]);
     page = 0;
     octave = 0;
     it = 0;
-    if (plat_store_load(M->obj, &st, sizeof st) == (int)sizeof st && st.magic == M->magic && st.version == M->version &&
-        st.items == n && st.fields == M->fields) {
+    if (plat_store_load(M->obj, &store_buf, size) == (int)size && st->magic == M->magic &&
+        st->version == M->version && st->items == n && st->fields == M->fields) {
         for (it = 0; it < n; it++) {
             for (i = 0; i < M->fields; i++)
-                table[it][i] = st.rows[it][i];
+                table[it][i] = st->rows[it][i];
             table[it][0] = it;
             M->clamp(table[it]);
         }
-        page = clamp(st.page, 0, M->npages - 1);
-        octave = clamp(st.octave, -3, 3);
-        it = clamp(st.item, 0, n - 1);
+        page = clamp(st->page, 0, M->npages - 1);
+        octave = clamp(st->octave, -3, 3);
+        it = clamp(st->item, 0, n - 1);
         if (M->extra_len)
-            isc_memcpy(M->extra, st.extra, M->extra_len);
+            isc_memcpy(M->extra, st->extra, M->extra_len);
+        if (M->more_len)
+            isc_memcpy(M->more, store_buf.more, M->more_len);
     }
     isc_memcpy(row, table[it], sizeof row);
 }
@@ -718,10 +764,10 @@ static void load_mode(void)
 /* A flash write silences the sound for a moment, so it waits until nothing plays. */
 static void save_when_quiet(void)
 {
-    static stored_t st;
+    stored_t *const st = &store_buf.st;
     int it, i;
     if (!(dirty || global_dirty) || plat_ms() - changed_at < 1500u || isc_synth_active_voices() || ui.keys ||
-        arp.running)
+        arp.running || (M->busy && M->busy()))
         return;
     if (global_dirty) {
         global_t g;
@@ -734,20 +780,22 @@ static void save_when_quiet(void)
     }
     if (dirty) {
         isc_memcpy(table[item()], row, sizeof row);
-        isc_memset(&st, 0, sizeof st);
-        st.magic = M->magic;
-        st.version = M->version;
-        st.item = (uint8_t)item();
-        st.page = (uint8_t)page;
-        st.items = (uint8_t)M->count();
-        st.fields = (uint8_t)M->fields;
-        st.octave = (int8_t)octave;
+        isc_memset(st, 0, sizeof *st);
+        st->magic = M->magic;
+        st->version = M->version;
+        st->item = (uint8_t)item();
+        st->page = (uint8_t)page;
+        st->items = (uint8_t)M->count();
+        st->fields = (uint8_t)M->fields;
+        st->octave = (int8_t)octave;
         if (M->extra_len)
-            isc_memcpy(st.extra, M->extra, M->extra_len);
+            isc_memcpy(st->extra, M->extra, M->extra_len);
         for (it = 0; it < M->count(); it++)
             for (i = 0; i < M->fields; i++)
-                st.rows[it][i] = (uint8_t)table[it][i];
-        if (plat_store_save(M->obj, &st, sizeof st) == 0)
+                st->rows[it][i] = (uint8_t)table[it][i];
+        if (M->more_len)
+            isc_memcpy(store_buf.more, M->more, M->more_len);
+        if (plat_store_save(M->obj, &store_buf, sizeof(stored_t) + M->more_len) == 0)
             dirty = 0;
     }
     if (dirty || global_dirty)
@@ -759,6 +807,7 @@ static void save_when_quiet(void)
 static void start_mode(int i)
 {
     int n;
+    uint32_t f;
     const md_mode_t *const *all = modes(&n);
     mode_index = clamp(i, 0, n - 1);
     M = all[mode_index];
@@ -770,6 +819,13 @@ static void start_mode(int i)
         changed_at = plat_ms();
     }
     engine_apply();
+    if (M->start)
+        M->start();
+    if (M->block) {
+        f = plat_lock();
+        mode_block = M->block;
+        plat_unlock(f);
+    }
     if (M->selected)
         M->selected();
     ui.redraw = 1;
@@ -783,6 +839,8 @@ void app_init(void)
     M = 0;
     dirty = global_dirty = 0;
     note_head = note_tail = 0;
+    mode_block = 0;
+    isc_memset(note_holds, 0, sizeof note_holds);
     pend_voice = pend_fx = pend_pattern = pend_panic = 0;
     pend_program = -1;
     isc_synth_init();
@@ -875,11 +933,12 @@ int app_expect(const char *what, int *got)
 #include "modes/iscream.c"
 #include "modes/almanac.c"
 #include "modes/woof.c"
+#include "modes/phase.c"
 
 /* The modes, in the chooser's order. A new mode goes on the end, with a store object of its own (app.h). */
 static const md_mode_t *const *modes(int *n)
 {
-    static const md_mode_t *const all[] = {&MODE_ISCREAM, &MODE_ALMANAC, &MODE_WOOF};
+    static const md_mode_t *const all[] = {&MODE_ISCREAM, &MODE_ALMANAC, &MODE_WOOF, &MODE_PHASE};
     *n = (int)(sizeof all / sizeof all[0]);
     return all;
 }

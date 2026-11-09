@@ -4,10 +4,12 @@ id_prefix = "FM-1_50"          # package identity: dev FM-1_5000, releases FM-1_
 usb_manufacturer = "MF-1"
 usb_product = "MF-1 Modes FM-1"
 # The engine is iScream's port of MF-1's. Each mode's own C port and its scene (a copy of the desktop app's) are
-# separate units, so their names never meet.
-include = ["../iscream/dsp", "../almanac/dsp", "../woof/dsp"]
+# separate units, so their names never meet; Phase's processes are the desktop's process.c, copied unchanged.
+include = ["../iscream/dsp", "../almanac/dsp", "../woof/dsp", "../phase/dsp"]
 o2 = ["../iscream/dsp/fm.c", "../iscream/dsp/fx.c", "../iscream/dsp/synth.c", "../iscream/dsp/iscream.c",
-      "../almanac/dsp/alm.c", "../almanac/dsp/scene.c", "../woof/dsp/wf.c", "../woof/dsp/scene.c"]
+      "../almanac/dsp/alm.c", "../almanac/dsp/scene.c", "../woof/dsp/wf.c", "../woof/dsp/scene.c",
+      "../phase/dsp/ph.c", "../phase/dsp/player.c", "../phase/dsp/process.c",
+      "../phase/dsp/div64.c"]
 o2_cflags = ["-DISC_FASTMATH"]
 words = "words.tsv"
 ble = false
@@ -17,5 +19,5 @@ repo = "https://github.com/IanButterworth/mf-1"
 licence = "MIT"
 credits = "Built on fm1-base and felucca-bsp (MPL-2.0); FM engine from msfa (Apache-2.0) by way of MF-1."
 author = "The MF-1 authors"
-description = "MF-1's modes in one firmware: iScream, an ice cream synth; Almanac, the year as twelve sounds; and Woof, a dog show with every key a bark. Hold a piano key while switching on to choose; otherwise the last mode used starts."
+description = "MF-1's modes in one firmware: iScream, an ice cream synth; Almanac, the year as twelve sounds; Woof, a dog show with every key a bark; and Phase, process music where a phrase you play drifts against itself. Hold a piano key while switching on to choose; otherwise the last mode used starts."
 tags = ["synth"]

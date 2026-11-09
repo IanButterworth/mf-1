@@ -1,5 +1,5 @@
 ---
-description: Build and test the modes firmware (iScream, Almanac, Woof) - parity with MF-1, the host simulator, the device build and its safety checks
+description: Build and test the modes firmware (iScream, Almanac, Woof, Phase) - parity with MF-1, the host simulator, the device build and its safety checks
 argument-hint: "[parity|host|device] (default: all three)"
 ---
 

@@ -45,6 +45,62 @@ static void spot(int32_t cx, int32_t cy, int32_t r, uint32_t rgb)
     }
 }
 
+/* A circle's outline, a pixel wide. With a gap, dotted: one pixel lit, then that many unlit. */
+static void ring(int32_t cx, int32_t cy, int32_t r, uint32_t rgb, int gap)
+{
+    int32_t x = r, y = 0, err = 1 - r, i;
+    if (cy + r < band_y || cy - r >= band_y + BAND_H)
+        return;
+    for (i = 0; x >= y; i++) {
+        if (!gap || i % (gap + 1) == 0) {
+            fill(cx + x, cy + y, 1, 1, rgb), fill(cx - x, cy + y, 1, 1, rgb);
+            fill(cx + x, cy - y, 1, 1, rgb), fill(cx - x, cy - y, 1, 1, rgb);
+            fill(cx + y, cy + x, 1, 1, rgb), fill(cx - y, cy + x, 1, 1, rgb);
+            fill(cx + y, cy - x, 1, 1, rgb), fill(cx - y, cy - x, 1, 1, rgb);
+        }
+        y++;
+        if (err < 0) {
+            err += 2 * y + 1;
+        } else {
+            x--;
+            err += 2 * (y - x) + 1;
+        }
+    }
+}
+
+/* A straight line drawn with a square pen w pixels wide. */
+static void segment(int32_t x0, int32_t y0, int32_t x1, int32_t y1, int32_t w, uint32_t rgb)
+{
+    int32_t dx = x1 > x0 ? x1 - x0 : x0 - x1, dy = y1 > y0 ? y0 - y1 : y1 - y0;
+    int32_t sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy, e2;
+    for (;;) {
+        fill(x0 - w / 2, y0 - w / 2, w, w, rgb);
+        if (x0 == x1 && y0 == y1)
+            break;
+        e2 = 2 * err;
+        if (e2 >= dy)
+            err += dy, x0 += sx;
+        if (e2 <= dx)
+            err += dx, y0 += sy;
+    }
+}
+
+/* A point at angle a (radians, clockwise from the right as the screen's rows run down) and radius r from a centre. */
+static int32_t polar_x(float cx, float a, float r) { return (int32_t)(cx + fm_cosf(a) * r + 0.5f); }
+static int32_t polar_y(float cy, float a, float r) { return (int32_t)(cy + fm_sinf(a) * r + 0.5f); }
+
+/* Part of a circle from angle a0 to a1, drawn with a square pen w pixels wide, its points about a pixel apart. */
+static void arc(float cx, float cy, float r, float a0, float a1, int32_t w, uint32_t rgb)
+{
+    int32_t n = (int32_t)((a1 - a0) * r) + 1, i;
+    if (cy + r + (float)w < (float)band_y || cy - r - (float)w >= (float)(band_y + BAND_H))
+        return;
+    for (i = 0; i <= n; i++) {
+        float a = a0 + (a1 - a0) * (float)i / (float)n;
+        fill(polar_x(cx, a, r) - w / 2, polar_y(cy, a, r) - w / 2, w, w, rgb);
+    }
+}
+
 static void text_at(int32_t x, int32_t y, const felucca_font_t *f, const char *s, uint32_t rgb, int centre)
 {
     if (centre)

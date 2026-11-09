@@ -1,6 +1,7 @@
 /* What a mode is to the shared core: its items (months, dogs) as rows of numbers, how a row becomes a voice, effects,
  * an arpeggio and the notes a key plays, its four knob pages, its buttons and its screen. The core owns the engine,
- * the keys, the arpeggiator, saving, the panel and the shared drawing; a mode adds only what is its own. */
+ * the keys, the arpeggiator, saving, the panel and the shared drawing; a mode adds only what is its own. A mode that
+ * plays notes of its own (Phase's processes) runs them in the audio interrupt, through the core's note counts. */
 #pragma once
 #include <stdint.h>
 #include "fx.h"
@@ -8,6 +9,7 @@
 #define MD_FIELDS 32                   /* the most fields a mode's row may have */
 #define MD_PAGES 7                     /* the most pages: one for each of the top row's buttons and HOME */
 #define MD_ITEMS 16                    /* the most items a mode may have */
+#define MD_MORE_MAX 512                /* the most bytes of a mode's own state saved after its rows */
 
 /* How repeats, chases and patterns run on the arpeggiator: MF-1's mode numbering and rate index, gate in percent,
  * tempo in BPM. */
@@ -48,6 +50,8 @@ typedef struct {
     const md_theme_t *theme;
     uint8_t *extra;                    /* a few bytes of the mode's own state, saved with its rows */
     uint8_t extra_len;
+    uint8_t *more;                     /* more of it than extra holds (Phase's cells), saved after the rows */
+    uint16_t more_len;
 
     int (*count)(void);
     void (*defaults)(int item, int32_t *out);
@@ -66,10 +70,18 @@ typedef struct {
     int (*knob)(int k, int delta);     /* a turn of KNOB1-4 the mode handles itself: nonzero if it did */
     uint32_t (*dim)(void);             /* buttons it lights dimly */
     void (*frame)(uint32_t now);       /* every pass of the main loop, after the input */
-    void (*selected)(void);            /* after the item changes */
+    void (*start)(void);               /* once, when the mode starts, after its settings are loaded */
+    void (*selected)(void);            /* after the item changes, and at the start */
     void (*scene)(uint32_t now, uint32_t *px);    /* draws the picture into the shared buffer, if the mode has one */
     int scene_w, scene_h, art_k;
     void (*draw)(uint32_t now);        /* each screen band: what goes over and around the picture, or everything */
     uint16_t idle_ms, busy_ms;         /* how often the screen moves, and while a note sounds */
     int (*expect)(const char *what, int *got);    /* the host simulator's checks the mode adds */
+
+    /* A mode that plays notes of its own. The audio interrupt calls block before each of the engine's 64-sample
+     * blocks; it plays through md_hold and md_let_go (app.c), which count each note's holders, and while it is set
+     * the keys' notes are counted with the mode's, so one holder letting go never cuts another's note. */
+    void (*block)(void);
+    int (*busy)(void);                 /* it is playing notes of its own: nothing is saved meanwhile */
+    uint32_t (*lit)(void);             /* buttons it lights fully */
 } md_mode_t;

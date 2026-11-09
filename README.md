@@ -4,14 +4,15 @@ Two things for the M-VAVE FM-1 pocket FM synthesizer, sharing one engine:
 
 - **The MF-1 app**: a native macOS emulator of the FM-1. It has the same panel, screens, engine and MIDI/SysEx
   behaviour, so patches, librarians and workflows made for the FM-1 work with it. It also has
-  [iScream](#iscream), [Almanac](#almanac) and [Woof](#woof) modes.
-- **[The modes firmware](#firmware-for-the-fm-1)**: iScream, Almanac and Woof in one firmware on the FM-1 itself, in place
-  of M-VAVE's firmware. Their engine renders the same samples as the app.
+  [iScream](#iscream), [Almanac](#almanac), [Woof](#woof) and [Phase](#phase) modes.
+- **[The modes firmware](#firmware-for-the-fm-1)**: iScream, Almanac, Woof and Phase in one firmware on the FM-1 itself, in
+  place of M-VAVE's firmware. Their engine renders the same samples as the app.
 
 <p>
-  <img src="docs/images/iscream.jpg" width="32%" alt="iScream mode: the pink panel with a three-scoop strawberry cone on the screen">
-  <img src="docs/images/almanac.jpg" width="32%" alt="Almanac mode: the ink-blue panel with brass knobs, showing October's autumn forest on the screen">
-  <img src="docs/images/woof.jpg" width="32%" alt="Woof mode: the white panel with black spots and red buttons, a dalmatian barking WOOF on the rooftops at dusk">
+  <img src="docs/images/iscream.jpg" width="49%" alt="iScream mode: the pink panel with a three-scoop strawberry cone on the screen">
+  <img src="docs/images/almanac.jpg" width="49%" alt="Almanac mode: the ink-blue panel with brass knobs, showing October's autumn forest on the screen">
+  <img src="docs/images/woof.jpg" width="49%" alt="Woof mode: the white panel with black spots and red buttons, a dalmatian barking WOOF on the rooftops at dusk">
+  <img src="docs/images/phase.jpg" width="49%" alt="Phase mode: the paper-white panel with one red PLAY/STOP button, two rings of notes turning apart on the screen">
 </p>
 
 ## Install
@@ -152,15 +153,28 @@ only what a real FM-1 has. See `docs/woof.md`.
 
 ![Every dog's screen as it barks, from the Dalmatian on the rooftops to Otto in the park](docs/images/woof-dogs.jpg)
 
+## Phase
+
+View › Phase Mode turns MF-1 into **Phase**, process music in the manner of the minimalists' tape and phase pieces.
+Play a short phrase on the keys and it becomes a process: two or more copies of it drift apart and lock into new
+patterns, jump ahead, fill in their rests, follow each other in canon, pulse as a chord, stretch into long notes, or
+loop at slightly different lengths. Eight pieces, each an original cell with its own sound (marimba, wood block,
+glockenspiel, voices, electric piano, organ, vibraphone, bells) and process. The screen is a graphic score: each part
+a ring of its notes, turning under a red line, so the offset between parts shows as rotation. Like the other modes it
+has its own settings folder and MIDI port, and its sounds use only what a real FM-1 has. See `docs/phase.md`.
+
+![The eight pieces' scores mid-process, from Two Mallets drifting apart to Tape Bells sliding](docs/images/phase-pieces.jpg)
+
 ## Firmware for the FM-1
 
-`firmware/fm1-modes` builds one firmware for the real FM-1 with iScream, Almanac and Woof in it. Switch on and the
-last mode used starts; hold a piano key while switching on to choose another. It is an app on
+`firmware/fm1-modes` builds one firmware for the real FM-1 with iScream, Almanac, Woof and Phase in it. Switch on and
+the last mode used starts; hold a piano key while switching on to choose another (F iScream, G Almanac, A Woof,
+B Phase). It is an app on
 [fm1-base](https://github.com/charlesvestal/fm1-base) (a git submodule) and felucca-bsp. Its engine is a C port of
 MF-1's, and parity tests check that it renders the same samples as the app and that each mode gives the desktop's
 voices and effects. The modes share the engine, the panel code and the screen, so each new one costs little room. It
 has run on one unit: it boots, plays in every mode and has logged no crash. CPU load, dropouts and output level have
-not been measured yet. Build and install steps are in `firmware/fm1-modes/README.md`; the route and its risks are in
+not been measured yet, and Phase is installed on that unit but has not been played on it yet. Build and install steps are in `firmware/fm1-modes/README.md`; the route and its risks are in
 `docs/research/fm1-firmware-development.md`.
 
 Installing firmware on an FM-1 can leave it unable to start. Back up its whole flash first, and keep a rescue

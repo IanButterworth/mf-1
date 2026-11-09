@@ -25,6 +25,8 @@ jobs:
         run: firmware/almanac/tests/run_parity.sh
       - name: Firmware parity (Woof)
         run: firmware/woof/tests/run_parity.sh
+      - name: Firmware parity (Phase)
+        run: firmware/phase/tests/run_parity.sh
       # The release DMG, signed and notarised as a release is when the secrets are there (not on pull requests
       # from forks), so a broken package or secret shows up before a release does.
       - name: Signing

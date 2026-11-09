@@ -23,6 +23,10 @@ int woofTests();
 void woofReport(int note);
 void woofWav(int dog, const char* path, int note, int argc, char** argv);
 void woofSceneSheet(const char* path, int place, int bark, int step);
+int phaseTests();
+void phaseReport(int note);
+void phaseWav(int piece, const char* path, double seconds);
+void phaseJitter(double seconds);
 
 static const double kRate = 48000;
 static int failures = 0;
@@ -811,6 +815,7 @@ int main(int argc, char** argv) {
     failed += iscreamTests();
     failed += almanacTests();
     failed += woofTests();
+    failed += phaseTests();
     return failed ? 1 : 0;
   }
   if (mode == "almanac-weather" && argc >= 5) {
@@ -819,6 +824,20 @@ int main(int argc, char** argv) {
   }
   if (mode == "almanac-test") return almanacTests() ? 1 : 0;
   if (mode == "woof-test") return woofTests() ? 1 : 0;
+  if (mode == "phase-test") return phaseTests() ? 1 : 0;
+  // phase-report [note]; phase-wav <piece 1-based> <out.wav> [seconds]; phase-jitter [seconds]
+  if (mode == "phase-report") {
+    phaseReport(argc > 3 ? atoi(argv[3]) : 60);
+    return 0;
+  }
+  if (mode == "phase-wav" && argc >= 5) {
+    phaseWav(atoi(argv[3]) - 1, argv[4], argc > 5 ? atof(argv[5]) : 30);
+    return 0;
+  }
+  if (mode == "phase-jitter") {
+    phaseJitter(argc > 3 ? atof(argv[3]) : 5);
+    return 0;
+  }
   // woof-report [note]; woof-wav <dog 1-based> <out.wav> <note> [field=value ...]
   if (mode == "woof-report") {
     woofReport(argc > 3 ? atoi(argv[3]) : 66);

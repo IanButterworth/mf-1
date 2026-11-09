@@ -155,3 +155,122 @@ expect dirty 0
 reboot
 wait 600
 expect mode 0
+# B picks Phase: Two Mallets, stopped, with the keys writing the cell.
+key 11 down
+reboot
+wait 600
+expect chooser 1
+key 11 up
+wait 50
+tapkey 6
+wait 50
+expect chooser 0
+expect mode 3
+expect piece 0
+expect playing 0
+expect writes 1
+expect notes 0
+shot phase.png
+# PLAY starts the process: the parts strike their notes from the audio interrupt.
+press PLAY
+release PLAY
+wait 2500
+expect playing 1
+expect voices >0
+expect releases >0
+shot phase_playing.png
+wait 5530
+shot phase_drift.png
+# Nothing is saved while it plays; PLAY again stops it and lets go of every note the parts hold.
+expect dirty 1
+press PLAY
+release PLAY
+wait 30
+expect playing 0
+expect releases 0
+expect held 0
+wait 3000
+expect voices 0
+expect dirty 0
+# Long Chord from BEGIN: the organ holds its notes until the parts let go.
+turn PRESET 5
+wait 50
+expect piece 5
+expect process 5
+press GLO
+release GLO
+wait 4000
+expect playing 1
+expect held >0
+shot phase_stretch.png
+press PLAY
+release PLAY
+wait 30
+expect held 0
+wait 1500
+expect voices 0
+# With WRITE off the keys play along: a key held over the parts is counted with them.
+press REC
+release REC
+wait 30
+expect writes 0
+press PLAY
+release PLAY
+wait 1000
+key 7 down
+wait 200
+expect playing 1
+expect notes 1
+expect held >0
+key 7 up
+wait 30
+press PLAY
+release PLAY
+wait 30
+expect held 0
+# WRITE on, and a phrase: the first key stops the process, a pause becomes a rest, and 1.5 s after the last key
+# the phrase becomes the cell and plays.
+press REC
+release REC
+wait 30
+expect writes 1
+press PLAY
+release PLAY
+wait 500
+tapkey 0
+expect playing 0
+wait 110
+tapkey 4
+wait 110
+tapkey 7
+wait 310
+tapkey 12
+expect writing 4
+wait 300
+shot phase_writing.png
+wait 2000
+expect writing 0
+expect cell 5
+expect length 5
+expect playing 1
+shot phase_cell.png
+press PLAY
+release PLAY
+wait 30
+expect held 0
+# A negative transpose is kept, and switched on again it is Phase as it was left, stopped.
+press FX
+release FX
+turn K3 -3
+wait 50
+expect transpose -3
+wait 3000
+expect dirty 0
+reboot
+wait 600
+expect mode 3
+expect piece 5
+expect cell 5
+expect transpose -3
+expect playing 0
+expect page 1

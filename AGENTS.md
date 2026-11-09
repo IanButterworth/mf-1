@@ -111,24 +111,29 @@ Licences matter when reading community code:
   the song library and the audio output list.
   - `PanelView` is generic over `PanelDriver` (`PanelDriver.swift`): `DeviceModel` drives MF-1,
     `IScreamModel` drives iScream. Anything new that the panel needs from its model goes on the protocol.
-  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`), Almanac and Woof are modes of the same app (View ›
-    iScream Mode, Almanac Mode or Woof Mode, or `--iscream`, `--almanac` and `--woof`), picked at launch; `main.swift` picks the front end. Keep MF-1's behaviour unchanged when editing shared panel code,
+  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`), Almanac, Woof and Phase are modes of the same app (View ›
+    iScream Mode and the rest, or `--iscream`, `--almanac`, `--woof` and `--phase`), picked at launch; `main.swift` picks the front end. Keep MF-1's behaviour unchanged when editing shared panel code,
     and check both with `--snapshot`.
 - `Sources/IScreamCore` (C++17): iScream's flavors, how a sundae becomes an FM-1 voice and effects. It
   uses only the public C API and only what a real FM-1 has (see `docs/iscream.md`).
 - `Sources/AlmanacCore` (C++17 and C): Almanac's months, how a day becomes an FM-1 voice, effects and the notes a
   key plays, and `scene.c`, the pixel-art scene in plain C for a later firmware (see `docs/almanac.md`). Almanac's
   front end is `AlmanacModel`, `AlmanacScreen` and `AlmanacApp`; `ModeApp.swift` holds the window and keyboard code
-  iScream, Almanac and Woof share.
+  the modes share.
 - `Sources/WoofCore` (C++17 and C): Woof's dogs, how a breed's settings become an FM-1 bark (throat, fixed-frequency
   mouth and breath stacks, with a pitch envelope), effects and the notes a key plays, and `scene.c`, the dog cartoon
   in plain C (see `docs/woof.md`). Its front end is `WoofModel`, `WoofScreen` and `WoofApp`; its spotted case is
   `Finish.woof`.
+- `Sources/PhaseCore` (C++17 and C): Phase's pieces and sounds, and `process.c`, the processes in plain C (phase,
+  shift, build, canon, pulse, stretch, result, tape), each part's position worked out from the elapsed time. The
+  player (`player.cc`) runs them on its own real-time thread and counts the notes parts share (see `docs/phase.md`).
+  Its front end is `PhaseModel`, `PhaseScreen` and `PhaseApp`; its paper-white case is `Finish.phase`. `process.c`
+  needs no C library and makes every 64-bit product out of line, because the firmware builds the same file.
 - `Sources/mf1-render`: headless checks (`main.cc`, `tests_engine.cc`, `iscream_tests.cc`, `almanac_tests.cc`,
-  `woof_tests.cc`), benchmark
+  `woof_tests.cc`, `phase_tests.cc`), benchmark
   and WAV rendering through the offline C API.
 - `docs/research/`: the specs the emulation is built from.
-- `firmware/fm1-modes`: one firmware for the real FM-1 holding iScream, Almanac and Woof, chosen at power-on, on
+- `firmware/fm1-modes`: one firmware for the real FM-1 holding iScream, Almanac, Woof and Phase, chosen at power-on, on
   fm1-base (`firmware/fm1-base`, a submodule). A shared core runs each mode through the interface in `mode.h`; each
   mode's panel and screen is `modes/NAME.c`. Its sound comes from the modes' C ports:
   - `firmware/iscream`: the engine, a C port of MF-1's kept bit for bit equal by `tests/run_parity.sh`, and
@@ -137,6 +142,9 @@ Licences matter when reading community code:
     `tests/run_parity.sh`.
   - `firmware/woof`: a change to WoofCore (dogs, mapping or scene.c) needs `tools/gen_dogs.sh` and
     `tests/run_parity.sh`.
+  - `firmware/phase`: Phase's pieces and sounds, a copy of PhaseCore's `process.c`, and its player for the audio
+    interrupt. A change to PhaseCore (pieces, sounds, `phase.cc`, `process.c` or `player.cc`) needs `tools/gen_pieces.sh`
+    and `tests/run_parity.sh`.
   Build and test it with the `fm1-firmware` skill. Anything that touches a connected FM-1 goes through the `fm1-device` skill, which asks
   before every write.
 
