@@ -48,6 +48,7 @@ struct IScreamApp: App {
                     if a.runModal() == .alertFirstButtonReturn { model.resetAll() }
                 }
             }
+            UpdateCommands()
             CommandGroup(replacing: .help) {
                 Button("iScream Controls") { IScreamApp.showHelp() }
             }

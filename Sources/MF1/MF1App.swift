@@ -83,6 +83,7 @@ struct MF1App: App {
                     if a.runModal() == .alertFirstButtonReturn { Engine.loadFactoryBanks() }
                 }
             }
+            UpdateCommands()
             CommandGroup(replacing: .help) {
                 Button("MF-1 Keyboard and Controls") { HelpWindow.show() }
             }

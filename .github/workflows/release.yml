@@ -1,0 +1,86 @@
+name: Release
+
+# Publishing a GitHub release for a tag builds the DMG from that tag, signs and notarises it when the
+# Developer ID secrets are set, and attaches it with the update feed the app reads.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The release tag to build again, e.g. v1.6.0
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  dmg:
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.TAG }}
+      - name: The tag matches VERSION
+        run: test "v$(cat VERSION)" = "$TAG"
+      - name: Build and test
+        run: |
+          swift build -c release
+          .build/release/mf1-render Sources/MF1/Resources/Banks test
+      - name: Developer ID certificate
+        if: env.MACOS_CERT_P12 != ''
+        env:
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          KC=$RUNNER_TEMP/signing.keychain-db
+          KC_PASS=$(uuidgen)
+          printf '%s' "$MACOS_CERT_P12" | base64 --decode > $RUNNER_TEMP/cert.p12
+          security create-keychain -p "$KC_PASS" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KC_PASS" "$KC"
+          security import $RUNNER_TEMP/cert.p12 -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KC_PASS" "$KC" >/dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          rm $RUNNER_TEMP/cert.p12
+          ID=$(security find-identity -v -p codesigning "$KC" | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
+          test -n "$ID"
+          echo "SIGN_IDENTITY=$ID" >> $GITHUB_ENV
+      - name: Notary key
+        if: env.NOTARY_KEY_P8 != ''
+        run: |
+          printf '%s' "$NOTARY_KEY_P8" | base64 --decode > $RUNNER_TEMP/notary.p8
+          echo "NOTARY_KEY=$RUNNER_TEMP/notary.p8" >> $GITHUB_ENV
+      - name: DMG
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
+        run: scripts/make-dmg.sh
+      - name: Update feed
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          test -n "$SPARKLE_PRIVATE_KEY"
+          gh release view "$TAG" --json body --jq .body > $RUNNER_TEMP/notes.md
+          scripts/make-appcast.sh "build/MF-1-$(cat VERSION).dmg" $RUNNER_TEMP/notes.md
+      - name: Attach to the release
+        run: |
+          DMG="build/MF-1-$(cat VERSION).dmg"
+          gh release upload "$TAG" "$DMG" build/appcast.xml --clobber
+          gh release download "$TAG" --pattern "$(basename "$DMG")" --dir $RUNNER_TEMP/check
+          shasum -a 256 "$DMG" $RUNNER_TEMP/check/*.dmg
+          cmp "$DMG" $RUNNER_TEMP/check/*.dmg
+      - name: Clean up
+        if: always()
+        run: |
+          rm -f $RUNNER_TEMP/notary.p8
+          security delete-keychain $RUNNER_TEMP/signing.keychain-db 2>/dev/null || true

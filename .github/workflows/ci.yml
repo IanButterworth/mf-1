@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: swift build -c release
+      - name: Engine and mode checks
+        run: .build/release/mf1-render Sources/MF1/Resources/Banks test
+      - name: Firmware parity (iScream)
+        run: firmware/iscream/tests/run_parity.sh
+      - name: Firmware parity (Almanac)
+        run: firmware/almanac/tests/run_parity.sh
+      - name: Firmware parity (Woof)
+        run: firmware/woof/tests/run_parity.sh
+      # The release DMG, unsigned, so a broken package shows up before a release does.
+      - name: DMG
+        run: scripts/make-dmg.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: MF-1-dmg
+          path: build/MF-1-*.dmg
+          retention-days: 7

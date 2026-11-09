@@ -1,10 +1,13 @@
 #!/bin/sh
 # Builds a universal MF-1.app and packs it into build/MF-1-<version>.dmg,
-# with the usual drag-to-Applications window.
+# with the usual drag-to-Applications window. The app carries the update feed.
+# With SIGN_IDENTITY (a Developer ID Application identity) the app and DMG are signed with it; with
+# NOTARY_KEY (an App Store Connect API key file), NOTARY_KEY_ID and NOTARY_ISSUER as well, the DMG is notarised
+# and stapled. Without them the app is ad-hoc signed, as before.
 set -e
 cd "$(dirname "$0")/.."
 VERSION=$(cat VERSION)
-UNIVERSAL=1 scripts/build-app.sh
+UNIVERSAL=1 UPDATES=1 scripts/build-app.sh
 STAGE=build/dmg
 RW=build/MF-1-rw.dmg
 OUT=build/MF-1-$VERSION.dmg
@@ -41,4 +44,12 @@ hdiutil detach -quiet "$DEV"
 hdiutil convert -quiet "$RW" -format UDZO -imagekey zlib-level=9 -o "$OUT"
 rm -f "$RW"
 rm -rf "$STAGE"
+if [ -n "$SIGN_IDENTITY" ]; then
+  codesign --force --timestamp --sign "$SIGN_IDENTITY" "$OUT"
+  if [ -n "$NOTARY_KEY" ]; then
+    xcrun notarytool submit "$OUT" --key "$NOTARY_KEY" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER" --wait
+    xcrun stapler staple "$OUT"
+    spctl --assess --type open --context context:primary-signature -v "$OUT"
+  fi
+fi
 echo "built $OUT"
