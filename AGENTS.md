@@ -183,7 +183,8 @@ the `mf-1` item in Ian's login keychain. If it is lost, released apps can never 
 
 Signing secrets: `MACOS_CERT_P12` (base64 Developer ID Application certificate) and `MACOS_CERT_PASSWORD`;
 notarising: `NOTARY_KEY_P8` (base64 App Store Connect API key), `NOTARY_KEY_ID`, `NOTARY_ISSUER`. Without them the
-app is ad-hoc signed and macOS asks users to approve it in System Settings › Privacy & Security.
+app is ad-hoc signed and macOS asks users to approve it in System Settings › Privacy & Security. CI signs and
+notarises its DMG on every push and pull request too, so a broken secret shows up before a release.
 
 ## UI pitfalls
 

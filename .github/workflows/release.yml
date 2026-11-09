@@ -25,8 +25,6 @@ jobs:
     env:
       TAG: ${{ github.event.release.tag_name || inputs.tag }}
       GH_TOKEN: ${{ github.token }}
-      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
-      NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -37,29 +35,12 @@ jobs:
         run: |
           swift build -c release
           .build/release/mf1-render Sources/MF1/Resources/Banks test
-      - name: Developer ID certificate
-        if: env.MACOS_CERT_P12 != ''
+      - name: Signing
         env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
           MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-        run: |
-          KC=$RUNNER_TEMP/signing.keychain-db
-          KC_PASS=$(uuidgen)
-          printf '%s' "$MACOS_CERT_P12" | base64 --decode > $RUNNER_TEMP/cert.p12
-          security create-keychain -p "$KC_PASS" "$KC"
-          security set-keychain-settings -lut 21600 "$KC"
-          security unlock-keychain -p "$KC_PASS" "$KC"
-          security import $RUNNER_TEMP/cert.p12 -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
-          security set-key-partition-list -S apple-tool:,apple: -k "$KC_PASS" "$KC" >/dev/null
-          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
-          rm $RUNNER_TEMP/cert.p12
-          ID=$(security find-identity -v -p codesigning "$KC" | sed -n 's/.*"\(Developer ID Application: .*\)"/\1/p' | head -1)
-          test -n "$ID"
-          echo "SIGN_IDENTITY=$ID" >> $GITHUB_ENV
-      - name: Notary key
-        if: env.NOTARY_KEY_P8 != ''
-        run: |
-          printf '%s' "$NOTARY_KEY_P8" | base64 --decode > $RUNNER_TEMP/notary.p8
-          echo "NOTARY_KEY=$RUNNER_TEMP/notary.p8" >> $GITHUB_ENV
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+        run: scripts/ci-signing.sh
       - name: DMG
         env:
           NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
