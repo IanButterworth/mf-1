@@ -25,11 +25,26 @@ jobs:
         run: firmware/almanac/tests/run_parity.sh
       - name: Firmware parity (Woof)
         run: firmware/woof/tests/run_parity.sh
-      # The release DMG, unsigned, so a broken package shows up before a release does.
+      # The release DMG, signed and notarised as a release is when the secrets are there (not on pull requests
+      # from forks), so a broken package or secret shows up before a release does.
+      - name: Signing
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+        run: scripts/ci-signing.sh
       - name: DMG
+        env:
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER: ${{ secrets.NOTARY_ISSUER }}
         run: scripts/make-dmg.sh
       - uses: actions/upload-artifact@v7
         with:
           name: MF-1-dmg
           path: build/MF-1-*.dmg
           retention-days: 7
+      - name: Clean up
+        if: always()
+        run: |
+          rm -f $RUNNER_TEMP/notary.p8
+          security delete-keychain $RUNNER_TEMP/signing.keychain-db 2>/dev/null || true
