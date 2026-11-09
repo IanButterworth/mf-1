@@ -9,6 +9,7 @@ are in `LICENSES/`, and the app carries this file, `LICENSE` and `LICENSES/` in 
 | FM-1 V15 factory bank, 128 voices, unmodified (see `Sources/MF1/Resources/Banks/README.md`) | Apache-2.0, as distributed by M-VAVE in FM1 Open | M-VAVE; many voices derive from Yamaha DX7 cartridges and the Dexed_cart compilation | `Sources/MF1/Resources/Banks/*.syx` |
 | Orbitron | SIL OFL 1.1 | The Orbitron Project Authors | `Sources/MF1/Resources/Fonts/Orbitron.ttf` |
 | Share Tech Mono | SIL OFL 1.1 | 2012 Carrois Type Design, Ralph du Carrois | `Sources/MF1/Resources/Fonts/ShareTechMono-Regular.ttf` |
+| Sparkle, the app's updater, unmodified. A Swift package, not copied here; the app carries it in `Contents/Frameworks` | MIT, with the parts it bundles under their own terms (`LICENSES/Sparkle.txt`) | Andy Matuschak, the Sparkle Project and contributors | `Package.swift` |
 | fm1-base and felucca-bsp, the firmware platform. A submodule, not copied here | MPL-2.0 (some files also Apache-2.0; see its `LICENSING.md`) | their authors, as listed in each file | `firmware/fm1-base` |
 
 Firmware packages built from `firmware/fm1-modes` also contain JieLi AC79 SDK files (Apache-2.0), downloaded at

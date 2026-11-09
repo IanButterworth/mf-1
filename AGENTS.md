@@ -168,14 +168,22 @@ Other `mf1-render` modes: `wav <preset> <out> [note]`, `song <n> <out> [s]`,
 
 ## Releases
 
-1. Bump `VERSION` in its own commit, push, and run the tests.
-2. `scripts/make-dmg.sh` builds a universal, ad-hoc signed app into `build/MF-1-<version>.dmg`.
-   Mount it and check the architectures, version and signature.
-3. Tag `v<version>` on the bump commit, then `gh release create` with the DMG and notes that start
-   with the `Claude:` preface. Download the asset back and compare its SHA-256.
+CI (`.github/workflows/release.yml`) builds the release; nothing is uploaded by hand.
 
-There is no Developer ID certificate, so releases are not notarised; the README and the notes
-tell users to right-click › Open on first launch.
+1. Bump `VERSION` in its own commit and push; the CI workflow runs the tests and builds an unsigned DMG.
+2. Tag `v<version>` on the bump commit, push the tag, then `gh release create v<version> --notes-file …` with notes
+   that start with the `Claude:` preface. The notes are also what the app's update window shows.
+3. Publishing starts the release workflow: it checks the tag against `VERSION`, builds the DMG, signs and notarises
+   it when the Developer ID secrets are set, and attaches it with `appcast.xml`, the update feed. Watch the run; a
+   failed run leaves the release without a DMG, and `workflow_dispatch` with the tag builds it again.
+
+Updates use Sparkle. The app reads `releases/latest/download/appcast.xml`, and every DMG must be signed with the
+EdDSA key whose public half is in `scripts/build-app.sh`. The private key is the `SPARKLE_PRIVATE_KEY` secret, and
+the `mf-1` item in Ian's login keychain. If it is lost, released apps can never update again, so never replace it.
+
+Signing secrets: `MACOS_CERT_P12` (base64 Developer ID Application certificate) and `MACOS_CERT_PASSWORD`;
+notarising: `NOTARY_KEY_P8` (base64 App Store Connect API key), `NOTARY_KEY_ID`, `NOTARY_ISSUER`. Without them the
+app is ad-hoc signed and macOS asks users to approve it in System Settings › Privacy & Security.
 
 ## UI pitfalls
 

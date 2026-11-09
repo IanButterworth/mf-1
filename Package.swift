@@ -7,6 +7,10 @@ let package = Package(
     products: [
         .executable(name: "MF1", targets: ["MF1"]),
     ],
+    dependencies: [
+        // Updates for the released app.
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.1"),
+    ],
     targets: [
         .target(
             name: "MF1Core",
@@ -49,7 +53,8 @@ let package = Package(
         ),
         .executableTarget(
             name: "MF1",
-            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore"],
+            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore",
+                           .product(name: "Sparkle", package: "Sparkle")],
             path: "Sources/MF1",
             resources: [.copy("Resources/Banks"), .copy("Resources/Fonts")]
         ),

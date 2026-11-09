@@ -48,6 +48,7 @@ struct WoofApp: App {
                     if a.runModal() == .alertFirstButtonReturn { model.resetAll() }
                 }
             }
+            UpdateCommands()
             CommandGroup(replacing: .help) {
                 Button("Woof Controls") { WoofApp.showHelp() }
             }

@@ -48,6 +48,7 @@ struct AlmanacApp: App {
                     if a.runModal() == .alertFirstButtonReturn { model.resetAll() }
                 }
             }
+            UpdateCommands()
             CommandGroup(replacing: .help) {
                 Button("Almanac Controls") { AlmanacApp.showHelp() }
             }
