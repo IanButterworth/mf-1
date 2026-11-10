@@ -97,6 +97,19 @@ final class PhaseModel: ObservableObject {
     // A snapshot draws the process at this tick instead of the player's.
     var snapshotTick: Int64? = nil
 
+    static let bigAfter = 5.0
+    // The last button, knob or click on the screen; the piano keys don't count.
+    var lastTouch = ProcessInfo.processInfo.systemUptime
+    // Left alone a while, the screen shows the score alone, enlarged.
+    var bigScore: Bool {
+        !writing && pill == nil && !mf1_bank_pending() && now() - lastTouch >= Self.bigAfter
+    }
+
+    func touch() {
+        if bigScore { objectWillChange.send() }
+        lastTouch = now()
+    }
+
     var tick = 0
     private(set) var led = LedState()
     private var heldKeys: [Int: Int] = [:]
@@ -303,6 +316,7 @@ final class PhaseModel: ObservableObject {
 
     func turnKnob(_ k: Int, _ delta: Int) {
         guard delta != 0 else { return }
+        touch()
         if mf1_bank_pending() {
             // A bank was sent to the port: KNOB1..4 choose where it goes, as on the hardware.
             if delta > 0 {
@@ -350,18 +364,21 @@ final class PhaseModel: ObservableObject {
 
     func turnSelect(_ delta: Int) {
         guard delta != 0 else { return }
+        touch()
         page = PhasePage(rawValue: max(0, min(PhasePage.allCases.count - 1, page.rawValue + delta))) ?? page
         scheduleSave()
     }
 
     func turnPresets(_ delta: Int) {
         guard delta != 0 else { return }
+        touch()
         selectPiece(piece + (delta > 0 ? 1 : -1))
     }
 
     // ALGORITHM is the process.
     func turnAlgorithm(_ delta: Int) {
         guard delta != 0 else { return }
+        touch()
         set(PH.process, value(PH.process) + (delta > 0 ? 1 : -1))
         showPill("Process", PH.processes[value(PH.process)])
     }
@@ -387,6 +404,7 @@ final class PhaseModel: ObservableObject {
     }
 
     func press(_ button: String) {
+        touch()
         if mf1_bank_pending() && button == "HOME" {
             mf1_bank_cancel()
             return
@@ -414,7 +432,10 @@ final class PhaseModel: ObservableObject {
     }
 
     // The long press on RESET.
-    func save() { resetPiece() }
+    func save() {
+        touch()
+        resetPiece()
+    }
 
     func buttonLit(_ b: String) -> Color? {
         if let p = Self.pageButtons[b] { return page == p ? .white : nil }
@@ -454,6 +475,7 @@ final class PhaseModel: ObservableObject {
     }
 
     func octDown(_ dir: Int) {
+        touch()
         octHeld.insert(dir)
         transposeTouched = false
         if octHeld.count == 2 {
@@ -465,6 +487,7 @@ final class PhaseModel: ObservableObject {
     }
 
     func octUp(_ dir: Int) {
+        touch()
         octHeld.remove(dir)
         if !transposeTouched && octHeld.isEmpty {
             let o = max(-3, min(3, octave + dir))

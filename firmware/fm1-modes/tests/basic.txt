@@ -179,7 +179,10 @@ expect playing 1
 expect voices >0
 expect releases >0
 shot phase_playing.png
+expect big 0
+# Five seconds after the last button, the score fills the screen.
 wait 5530
+expect big 1
 shot phase_drift.png
 # Nothing is saved while it plays; PLAY again stops it and lets go of every note the parts hold.
 expect dirty 1
@@ -187,6 +190,7 @@ press PLAY
 release PLAY
 wait 30
 expect playing 0
+expect big 0
 expect releases 0
 expect held 0
 wait 3000

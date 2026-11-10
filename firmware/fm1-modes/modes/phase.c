@@ -14,17 +14,21 @@ enum { PM_PROCESS = 1, PM_MOTION, PM_REPEATS, PM_PERCENT, PM_SIGNED, PM_SOUND, P
 #define PM_FADED 0x9A958Cu
 #define PM_PALE 0xD6D1C6u
 #define PM_PHRASE_MS 1500u               /* how long the keys must rest before a phrase becomes the cell */
-#define PM_FRAME_MS 50u                  /* the score turns at 20 frames a second while it plays */
+#define PM_FRAME_MS 20u                  /* under a frame's draw: frames back to back, 31-33 a second (measured) */
 #define PM_CX 120                        /* the centre of the rings */
 #define PM_CY 92
 #define PM_OUTER 55.f
+#define PM_BIG_MS 5000u                  /* the buttons and knobs left alone this long, the score fills the screen */
+#define PM_BIG_K 1.65f                   /* how much larger the score is drawn then */
+#define PM_BIG_CY 108
+#define PM_BIG_DY 68                     /* and how far down the status moves */
 
 /* Whether the keys write the cell (saved with the pieces), and each piece's cell (saved after them). */
 static uint8_t pm_state[1] = {1};
 #define pm_writes pm_state[0]
 static PhaseCell pm_cells[MD_ITEMS];
 
-static uint8_t pm_playing, pm_restart;
+static uint8_t pm_playing, pm_restart, pm_big;
 static PhaseProc pm_sent;                /* what the player was last given */
 static PhaseView pm_view;                /* where the process is, for the screen and the lights */
 static struct {
@@ -332,6 +336,7 @@ static void pm_frame(uint32_t now)
     PhaseProc p;
     int64_t tick = 0;
     uint32_t f;
+    int big;
     if (pm_restart) {
         pm_restart = 0;
         pm_nphrase = 0;
@@ -359,6 +364,11 @@ static void pm_frame(uint32_t now)
     }
     phase_view(pm_playing ? &pm_sent : &p, tick, &pm_view);
     pm_name_motion();
+    big = !pm_nphrase && !ui.pill[0] && now - ui.touched_at >= PM_BIG_MS;
+    if (big != pm_big) {
+        pm_big = (uint8_t)big;
+        ui.redraw = 1;
+    }
     if ((pm_playing || pm_nphrase) && now - ui.drawn_at >= PM_FRAME_MS)
         ui.redraw = 1;
 }
@@ -423,7 +433,7 @@ static void pm_dot(int32_t cx, int32_t cy, int32_t r, uint32_t rgb)
 }
 
 /* Under the rings: the process in red, how it stands, and the figure for it (the offset, the fill, the stage). */
-static void pm_draw_status(void)
+static void pm_draw_status(int32_t dy)
 {
     const PhaseView *v = &pm_view;
     char fig[16] = {0}, state[24] = {0}, n[12];
@@ -511,12 +521,12 @@ static void pm_draw_status(void)
     }
     upper(state, state, sizeof state);
     upper(ph_process_name(process), n, sizeof n);
-    pm_spaced(10, 138, &FONT_B, n, PM_RED, 2, 0);
-    pm_spaced(10, 154, &FONT_T, state, PM_FADED, 1, 0);
-    pm_text_right(230, 141, &FONT_M, fig, PM_INK);
+    pm_spaced(10, 138 + dy, &FONT_B, n, PM_RED, 2, 0);
+    pm_spaced(10, 154 + dy, &FONT_T, state, PM_FADED, 1, 0);
+    pm_text_right(230, 141 + dy, &FONT_M, fig, PM_INK);
     /* the font has no times sign: a small cross before the figure */
     if (times) {
-        int32_t x = 230 - text_w(&FONT_M, fig) - 10, y = 150;
+        int32_t x = 230 - text_w(&FONT_M, fig) - 10, y = 150 + dy;
         segment(x, y, x + 6, y + 6, 2, PM_INK);
         segment(x + 6, y, x, y + 6, 2, PM_INK);
     }
@@ -528,11 +538,13 @@ static void pm_draw_score(void)
 {
     const PhaseView *v = &pm_view;
     int parts = v->parts, length = v->length < 2 ? 2 : v->length, q, i;
-    float inner = pm_radius(parts - 1, parts);
-    fill(PM_CX, PM_CY - 64, 1, (int32_t)(PM_OUTER + 18.f - inner + 0.5f), PM_RED);
+    float k = pm_big ? PM_BIG_K : 1.f, cy = pm_big ? PM_BIG_CY : PM_CY, inner = pm_radius(parts - 1, parts);
+    int32_t pen = pm_big ? 2 : 1, s = pm_big ? 10 : 6;
+    fill(PM_CX - pen / 2, (int32_t)(cy - (PM_OUTER + 9.f) * k + 0.5f), pen,
+         (int32_t)((PM_OUTER + 18.f - inner) * k + 0.5f), PM_RED);
     for (q = 0; q < parts; q++) {
         const PhasePartView *pv = &v->part[q];
-        float r = pm_radius(q, parts), pos = (float)pv->pos_milli / 1000.f, mid = 60.f, half = 6.f, a0;
+        float r = pm_radius(q, parts) * k, pos = (float)pv->pos_milli / 1000.f, mid = 60.f, half = 6.f, a0;
         int active = pv->active, lo = 127, hi = 0;
         uint32_t ink = active ? PM_INK : PM_PALE;
         for (i = 0; i < length; i++)
@@ -544,22 +556,22 @@ static void pm_draw_score(void)
             mid = (float)(lo + hi) / 2.f;
             half = (float)(hi - lo) / 2.f > 6.f ? (float)(hi - lo) / 2.f : 6.f;
         }
-        ring(PM_CX, PM_CY, (int32_t)(r + 0.5f), ink, active ? 0 : 2);
+        ring(PM_CX, (int32_t)cy, (int32_t)(r + 0.5f), ink, active ? 0 : 2);
         /* the first step: a bar across the ring, so how far the rings have turned against each other shows */
         a0 = pm_angle(0.f, pos, length);
-        segment(polar_x(PM_CX, a0, r - 5.f), polar_y(PM_CY, a0, r - 5.f), polar_x(PM_CX, a0, r + 5.f),
-                polar_y(PM_CY, a0, r + 5.f), 1, ink);
+        segment(polar_x(PM_CX, a0, r - 5.f * k), polar_y(cy, a0, r - 5.f * k), polar_x(PM_CX, a0, r + 5.f * k),
+                polar_y(cy, a0, r + 5.f * k), pen, ink);
         for (i = 0; i < length; i++) {
             float a = pm_angle((float)i, pos, length), rr, t;
             int n = pv->note[i], into, lit;
             int32_t len = pv->len_milli[i];
             uint32_t col;
             if (n < 0) {
-                fill(polar_x(PM_CX, a, r) - 1, polar_y(PM_CY, a, r) - 1, 2, 2, active ? PM_FADED : PM_PALE);
+                fill(polar_x(PM_CX, a, r) - 1, polar_y(cy, a, r) - 1, pen + 1, pen + 1, active ? PM_FADED : PM_PALE);
                 continue;
             }
             t = ((float)n - mid) / half;
-            rr = r + (t < -1.f ? -1.f : t > 1.f ? 1.f : t) * 2.5f;
+            rr = r + (t < -1.f ? -1.f : t > 1.f ? 1.f : t) * 2.5f * k;
             /* sounding: the play line is inside the note */
             into = pv->pos_milli - i * 1000;
             if (into < 0)
@@ -568,18 +580,18 @@ static void pm_draw_score(void)
             col = !active ? PM_PALE : lit ? PM_RED : PM_INK;
             if (len > 550) {
                 float end = (float)len / 1000.f < (float)length - 0.2f ? (float)len / 1000.f : (float)length - 0.2f;
-                arc(PM_CX, PM_CY, rr, a, pm_angle((float)i + end, pos, length), 2, col);
+                arc(PM_CX, cy, rr, a, pm_angle((float)i + end, pos, length), pen + 1, col);
             }
-            pm_dot(polar_x(PM_CX, a, rr), polar_y(PM_CY, a, rr), lit ? 3 : 2, col);
+            pm_dot(polar_x(PM_CX, a, rr), polar_y(cy, a, rr), pm_big ? (lit ? 5 : 3) : (lit ? 3 : 2), col);
         }
     }
     if (!pm_playing) {
         /* stopped: a play sign in the middle */
         int32_t dy;
-        for (dy = -6; dy <= 6; dy++)
-            fill(PM_CX - 4, PM_CY + dy, 1 + (6 - (dy < 0 ? -dy : dy)) * 10 / 6, 1, PM_INK);
+        for (dy = -s; dy <= s; dy++)
+            fill(PM_CX - s * 2 / 3, (int32_t)cy + dy, 1 + (s - (dy < 0 ? -dy : dy)) * 5 / 3, 1, PM_INK);
     }
-    pm_draw_status();
+    pm_draw_status(pm_big ? PM_BIG_DY : 0);
 }
 
 /* While a phrase is written: the cell it will become, its notes as stems on a line in their steps, the newest in
@@ -664,6 +676,10 @@ static void pm_draw(uint32_t now)
 {
     char t[24];
     fill(0, band_y, 240, BAND_H, PM_PAPER);
+    if (pm_big) {
+        pm_draw_score();
+        return;
+    }
     pm_dot(13, 13, 4, PM_RED);
     upper(ph_piece(item())->title, t, sizeof t);
     pm_spaced(25, 5, &FONT_B, t, PM_INK, 2, 0);
@@ -698,6 +714,8 @@ static int pm_expect(const char *what, int *got)
         *got = pm_playing;
     else if (isc_streq(what, "writes"))
         *got = pm_writes;
+    else if (isc_streq(what, "big"))             /* the score alone, enlarged */
+        *got = pm_big;
     else if (isc_streq(what, "writing"))         /* the notes of the phrase being written */
         *got = pm_nphrase;
     else if (isc_streq(what, "cell"))            /* the steps of the piece's cell */

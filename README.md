@@ -174,7 +174,8 @@ B Phase). It is an app on
 MF-1's, and parity tests check that it renders the same samples as the app and that each mode gives the desktop's
 voices and effects. The modes share the engine, the panel code and the screen, so each new one costs little room. It
 has run on one unit: it boots, plays in every mode and has logged no crash. CPU load, dropouts and output level have
-not been measured yet, and Phase is installed on that unit but has not been played on it yet. Build and install steps are in `firmware/fm1-modes/README.md`; the route and its risks are in
+not been measured yet; the screen's frame rate has (31 to 39 frames a second in Phase). Build and install steps are
+in `firmware/fm1-modes/README.md`; the route and its risks are in
 `docs/research/fm1-firmware-development.md`.
 
 Installing firmware on an FM-1 can leave it unable to start. Back up its whole flash first, and keep a rescue

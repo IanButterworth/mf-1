@@ -9,7 +9,8 @@ back, relaunching the app, and `--phase` starts in it. Like the other modes it h
 Play a phrase on the keys and, a moment after the last key, it becomes the cell and the process starts again with
 it. The screen is a graphic score in black and red on paper: each part is a ring of its cell's steps, turning under a
 fixed red line that is now. Parts that have drifted apart sit rotated against each other, the bar across each ring
-marks its first step, and the notes being struck turn red. The case is paper white with black controls and one red
+marks its first step, and the notes being struck turn red. When no button, knob or click has come for 5 seconds, the
+score fills the screen alone, larger; the next touch brings the title, pages and values back. The case is paper white with black controls and one red
 button, PLAY/STOP.
 
 The pieces are all written for MF-1. None uses material from an existing composition.
@@ -100,7 +101,8 @@ lets go. Stopping, changing piece, leaving the mode and quitting let go of every
 - Hold **RESET** (the SAVE button) to put the piece and its cell back as written.
 - Every piece keeps its settings and its cell, in `~/Library/Application Support/Phase/pieces.json`.
 - On the screen: click a page to show it, click a value to step it, drag or scroll on it to turn it, drag on the
-  score to change the process, and click the title for the list of pieces.
+  score to change the process, and click the title for the list of pieces. While the score fills the screen, a
+  click or a scroll only brings the pages back.
 
 ## Honesty about parity
 
@@ -142,8 +144,10 @@ as `player.cc` for every piece, within one engine block, through changes and a s
   the top of each step of part 1 and dim between; REC is lit while the keys write and blinks while a phrase is
   written. The FM-1 has no screen to click, so there is no list of pieces and no drag on the score.
 - **The screen.** The desktop's score drawn with the firmware's fills: rings, arcs and spots, the red line, the
-  status, tabs and values, in 80-row bands. It moves at 20 frames a second while playing or writing, and at rest
-  only when something changes. The fonts are the firmware's (Barlow), with the desktop's letter spacing.
+  status, tabs and values, in 80-row bands. While playing or writing it draws frames back to back, as fast as the
+  screen's SPI link allows: 31 to 33 a second, and 38 to 39 with the score alone, which has less to draw (measured).
+  At rest it changes only when something does. The enlarged score comes after 5 seconds without a button or knob,
+  as on the desktop. The fonts are the firmware's (Barlow), with the desktop's letter spacing.
 - **Saving.** The settings and cells of all eight pieces, the page, the octave and whether the keys write are kept
   in a store object of Phase's own. Nothing is saved while the process plays, as a flash write silences the sound
   for a moment: stop it, and the save follows. Settings changed while playing are lost if the FM-1 is switched off
@@ -157,7 +161,7 @@ as `player.cc` for every piece, within one engine block, through changes and a s
   brightness, for one held note.
 - `mf1-render <banks> phase-wav <piece> <out.wav> [seconds]`: a piece's process played through the offline engine.
 - `mf1-render <banks> phase-jitter [seconds]`: runs the real player thread and prints how late its notes left.
-- `MF-1 --phase --snapshot out.png [screen|sheet] [piece N] [page N] [process N] [at STEPS] [write 1] [stopped 1]`:
-  renders the panel, the screen at four times the size, or every piece's screen on one sheet. Without `at` it draws
+- `MF-1 --phase --snapshot out.png [screen|sheet] [piece N] [page N] [process N] [at STEPS] [write 1] [stopped 1] [big 1]`:
+  renders the panel (`big 1`: the score alone, enlarged), the screen at four times the size, or every piece's screen on one sheet. Without `at` it draws
   a moment where the process is well under way.
 - `MF-1 --phase --selfcheck`: drives the model as the panel would, muted, and checks the engine and the player follow.

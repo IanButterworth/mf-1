@@ -175,6 +175,7 @@ enum PhaseSnapshot {
             if let v = option("process").flatMap(Int.init) { m.set(PH.process, v) }
             let steps = option("at").flatMap(Double.init) ?? moment(m)
             m.snapshotTick = option("stopped") == "1" ? nil : Int64(steps * Double(PH_TPS))
+            if option("big") == "1" { m.lastTouch = -.infinity }
         }
         if let n = option("piece").flatMap(Int.init) { model.selectPiece(n - 1) }
         configure(model)

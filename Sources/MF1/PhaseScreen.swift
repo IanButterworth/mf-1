@@ -16,6 +16,10 @@ enum PhaseLayout {
     static func tab(_ i: Int) -> CGRect { CGRect(x: 3 + CGFloat(i) * 59, y: 168, width: 56, height: 26) }
     static func chip(_ i: Int) -> CGRect { CGRect(x: 3 + CGFloat(i) * 59, y: 200, width: 56, height: 37) }
     static let pill = CGRect(x: 14, y: 204, width: 212, height: 28)
+    // The score alone: this much larger, centred lower, with the status this far down.
+    static let bigScale: CGFloat = 1.65
+    static let bigCenterY: CGFloat = 108
+    static let bigStatusDrop: CGFloat = 68
 
     // The ring each part plays on: the first outermost.
     static func radius(_ q: Int, of parts: Int) -> CGFloat {
@@ -52,6 +56,10 @@ struct PhaseScreen: View {
 
     private func draw(_ ctx: inout GraphicsContext) {
         ctx.fill(Path(CGRect(x: 0, y: 0, width: 240, height: 240)), with: .color(paper))
+        if model.bigScore {
+            drawScore(&ctx, model.view(), big: true)
+            return
+        }
         drawTitle(&ctx)
         if mf1_bank_pending() {
             drawBankPrompt(&ctx)
@@ -110,10 +118,17 @@ struct PhaseScreen: View {
         ctx.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)), with: .color(color))
     }
 
-    private func drawScore(_ ctx: inout GraphicsContext, _ v: PhaseView) {
+    private func drawScore(_ ctx: inout GraphicsContext, _ v: PhaseView, big: Bool = false) {
         let parts = Int(v.parts), length = max(2, Int(v.length))
         let shown = model.playing || model.snapshotTick != nil
         let views = withUnsafeBytes(of: v.part) { Array($0.bindMemory(to: PhasePartView.self)) }
+        let status = ctx
+        if big {
+            let k = PhaseLayout.bigScale, c = PhaseLayout.center
+            ctx.translateBy(x: c.x, y: PhaseLayout.bigCenterY)
+            ctx.scaleBy(x: k, y: k)
+            ctx.translateBy(x: -c.x, y: -c.y)
+        }
 
         // Now: a red line from the centre up through every ring.
         let top = PhaseLayout.center.y - PhaseLayout.outer - 9
@@ -177,7 +192,10 @@ struct PhaseScreen: View {
             tri.closeSubpath()
             ctx.fill(tri, with: .color(ink))
         }
-        drawStatus(&ctx, v, views, shown: shown)
+        var s = status
+        if big { s.translateBy(x: 0, y: PhaseLayout.bigStatusDrop) }
+        drawStatus(&s, v, views, shown: shown)
+        ctx = status
     }
 
     private func notes(_ p: PhasePartView) -> [Int] {
@@ -299,10 +317,13 @@ struct PhaseScreen: View {
 
 enum PhaseTarget: Equatable {
     case none, title, score, tab(Int), chip(Int), pill
+    // The enlarged score shows nothing to click: a click or a turn only brings the pages back.
+    case wake
 }
 
 extension PhaseModel {
     func screenTarget(at p: CGPoint) -> PhaseTarget {
+        if bigScore { return .wake }
         if PhaseLayout.title.contains(p) { return .title }
         if mf1_bank_pending() {
             for i in 0..<4 where PhaseLayout.chip(i).contains(p) { return .chip(i) }
@@ -319,6 +340,7 @@ extension PhaseModel {
 
     // A click on the score plays or stops; the pages and values work as on the panel.
     func screenClick(_ t: PhaseTarget, back: Bool) {
+        touch()
         switch t {
         case .tab(let i): page = PhasePage(rawValue: i) ?? page
         case .chip(let i):
@@ -329,12 +351,13 @@ extension PhaseModel {
             }
         case .score: if back { restart() } else { togglePlay() }
         case .pill: pill = nil
-        case .title, .none: break
+        case .title, .none, .wake: break
         }
     }
 
     func screenTurn(_ t: PhaseTarget, _ delta: Int) {
         guard delta != 0 else { return }
+        touch()
         switch t {
         case .title: turnPresets(delta)
         case .score: turnAlgorithm(delta)

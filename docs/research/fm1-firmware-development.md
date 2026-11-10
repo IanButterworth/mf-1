@@ -72,7 +72,7 @@ Our unit (factory V15, Puya `0x856014`), with `fm1_install.py` from the Mac:
 - TransitFM1 to iScream (`iscream.fwsc`, `FM-1_4700`, build `DAA5BFE7`, SHA-256 `6d7b85a6…`): a classic install,
   exit 0, `--info` gives `FM-1_4700`. The screen shows Vanilla, and keys play without audible dropouts. `fm1_remote.py
   log` reports no crash after playing.
-- Not yet measured: CPU load at 12 voices with effects, xruns, output level, the screen frame rate. `fm1_remote.py
+- Not yet measured: CPU load at 12 voices with effects, xruns, output level (the frame rate: below). `fm1_remote.py
   screen` prints nothing until iScream announces a change, so it reads empty right after boot.
 
 The firmware does not use M-VAVE's engine. It ports MF-1's msfa core and effects to C, so on hardware it sounds like
@@ -92,6 +92,25 @@ through TransitFM1. They are now modes of one firmware, `firmware/fm1-modes` (`F
 - Installed through TransitFM1 twice, two modes then three: both boot, play every mode and logged no crash. Right
   after the second install the Mac's MIDI service failed to create a client (CoreMIDI `-304`) and saw no MIDI
   devices at all, though the FM-1 itself was running and working.
+
+### The screen's frame rate (2026-11-09, measured)
+
+Timed on our unit with a probe build (the USB console on, the draw timed with the 24 MHz timer), in Phase with four
+parts playing:
+- A full frame takes 24 to 25 ms to draw (worst 28 ms), and 22 ms at rest. Each 80-row band needs about 3 ms of CPU
+  and 7 ms on the SPI link (38 KB at about 44 MHz). A band waits for the previous band's transfer, so the link sets
+  the pace. Drawn back to back, frames would reach about 34 a second.
+- fm1-base calls the app's frame at most every 16 ms. After a 25 ms draw the next calls come about 25 and 41 ms
+  later, so a 50 ms target drew only 17 to 18 frames a second, not 20. Only about 24 (targets of 26 to 41 ms) or about
+  34 (25 ms or less) are reachable.
+- Keys are read only between frames, so a key's note can wait up to one frame. Phase's own notes are not affected:
+  its player runs in the audio interrupt.
+- Measured the same way: a 40 ms target drew 24 to 25 frames a second. Phase now draws back to back (a 20 ms
+  target, under any frame's draw): 31 to 33 frames a second with its full layout, each frame 30 to 31 ms, as the top
+  band now waits for the last band's transfer. The enlarged score it shows when the panel is left alone draws 38 to 39
+  a second (25 ms a frame), as it has no text, tabs or values to render. Keys then wait up to a frame, about 25 to
+  34 ms.
+- Going further means sending fewer rows: redrawing only the rows that move would roughly halve the transfer.
 
 A factory mode beside them was considered and left out: M-VAVE's V15 package alone is about 700 KB of the 1 MiB
 flash, it expects to own the chip from a fixed address with its own boot area, and choosing between it and an

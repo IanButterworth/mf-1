@@ -44,6 +44,7 @@ static struct {
     uint8_t save_long;
     uint8_t oct_both;
     uint32_t drawn_at;
+    uint32_t touched_at;           /* the last button or knob, the piano keys aside */
     int8_t battery;
     uint8_t low_battery;
     uint8_t chooser, chooser_wait;     /* the chooser is up; it waits for the keys held at power-on to be let go */
@@ -612,6 +613,8 @@ static void input(void)
         else if (!(keys & bit) && (ui.keys & bit))
             key_up(k);
     }
+    if (btn != ui.btn)
+        ui.touched_at = now;
     for (k = 0; k < NB; k++) {
         uint32_t bit = 1u << k;
         if ((btn & bit) && !(ui.btn & bit) && k != B_OCTDN && k != B_OCTUP)
@@ -644,6 +647,7 @@ static void input(void)
         char t[16];
         if ((e = plat_enc((int)k)) == 0)
             continue;
+        ui.touched_at = now;
         switch (k) {
         case EN_SELECT: set_page(clamp(page + (e > 0 ? 1 : -1), 0, M->npages - 1)); break;
         case EN_PRESET: select_item(item() + (e > 0 ? 1 : -1)); break;
