@@ -11,7 +11,7 @@ One firmware for the M-VAVE FM-1 that runs MF-1's modes: iScream, Almanac, Woof,
 
 It has run on one unit (installed through TransitFM1 on 2026-11-08, identity `FM-1_5000`): it boots, plays in every
 mode and logged no crash. CPU load, output level and timing on the hardware are not measured yet. Phase is newer
-than that install and has run only in the host simulator, and so has Piano. See
+than that install and has run only in the host simulator. Piano has run on the unit since 2026-11-10 (below). See
 `../../docs/research/fm1-firmware-development.md` for the route and its risks.
 
 ## How it is built
@@ -44,7 +44,8 @@ another part's. Nothing is saved while it plays, as a flash write would silence 
 Piano is the one mode with a sound of its own. It hands the core an instrument (`inst` in `mode.h`) that the audio
 interrupt plays in place of the FM voices, with the effects after it; every note, the pedal and MIDI reach it through
 the core, with velocity (the keys' from TOUCH, MIDI's its own). Its screen loop lowers the engine's budget of partials
-when the audio load passes 80% and raises it again below 50%.
+when the audio load passes 80% and raises it again below 50%. The firmware reads the headphone jack (`headphones = true`
+in `fm1.toml`) so that Piano can give the speaker, and only the speaker, a 160 Hz high-pass.
 
 To add a mode: give it a C port and parity test of its own beside the others, a `modes/NAME.c` that fills in an
 `md_mode_t`, a store object at the end of the list in `app.h` (the next free pair of sectors below the others: Piano's

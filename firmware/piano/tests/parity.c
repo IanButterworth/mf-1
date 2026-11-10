@@ -19,6 +19,7 @@ int main(void)
         piano_default(v, s);
         for (k = 1; k < PN_FIELDS; k++)
             piano_setting(&P, k, s[k]);
+        pn_set_speaker(&P, v & 1);     /* half the voicings through the speaker's high-pass */
         for (b = 0; b < 44118 * 4 / PN_BLOCK; b++) {
             if (b == 0)
                 pn_pedal(&P, 1);

@@ -121,6 +121,20 @@ static void board_setup(pn_piano_t* p) {
   }
 }
 
+// A second-order Butterworth high-pass at 160 Hz, for the speaker (RBJ's cookbook).
+static void speaker_filter(pn_piano_t* p) {
+  float s, c;
+  pn_sincos(6.28318531f * 160.0f / p->sr, &s, &c);
+  float al = s * 0.70710678f, a0 = 1 + al;
+  p->hp_b0 = (1 + c) * 0.5f / a0;
+  p->hp_b1 = -(1 + c) / a0;
+  p->hp_b2 = p->hp_b0;
+  p->hp_a1 = -2 * c / a0;
+  p->hp_a2 = (1 - al) / a0;
+}
+
+void pn_set_speaker(pn_piano_t* p, int on) { p->speaker = on != 0; }
+
 void pn_init(pn_piano_t* p, float sr) {
   uint8_t* b = (uint8_t*)p;
   for (unsigned i = 0; i < sizeof *p; i++) b[i] = 0;
@@ -131,6 +145,9 @@ void pn_init(pn_piano_t* p, float sr) {
   p->noise = 0x1234567u;
   for (int n = 0; n < PN_NOTES; n++) p->damped[n] = 1;
   board_setup(p);
+  speaker_filter(p);
+  p->lim_top = 0.85f;
+  p->lim_rel = pn_exp2(-1.0f / (0.15f * sr) * 1.44269504f);
   p->knock_db = 0;
   p->knock_slope = 0.25f;
   p->knock_vel = 1.3f;
@@ -419,5 +436,19 @@ void pn_render(pn_piano_t* p, float* out) {
       }
       out[s] += y;
     }
+  }
+  for (int s = 0; s < PN_BLOCK; s++) {
+    float x = out[s];
+    if (p->speaker) {
+      float y = p->hp_b0 * x + p->hp_b1 * p->hp_x1 + p->hp_b2 * p->hp_x2 - p->hp_a1 * p->hp_y1 - p->hp_a2 * p->hp_y2;
+      p->hp_x2 = p->hp_x1;
+      p->hp_x1 = x;
+      p->hp_y2 = p->hp_y1;
+      p->hp_y1 = y;
+      x = y;
+    }
+    float a = x < 0 ? -x : x;
+    p->lim_env = a > p->lim_env ? a : p->lim_env * p->lim_rel;
+    out[s] = p->lim_env > p->lim_top ? x * (p->lim_top / p->lim_env) : x;
   }
 }

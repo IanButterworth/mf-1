@@ -13,6 +13,8 @@ o2 = ["../iscream/dsp/fm.c", "../iscream/dsp/fx.c", "../iscream/dsp/synth.c", ".
 o2_cflags = ["-DISC_FASTMATH"]
 words = "words.tsv"
 ble = false
+# the headphone jack is read, so Piano can spare the speaker its deepest bass
+headphones = true
 # the site and firmware hubs (docs/FIRMWARE-JSON.md)
 tagline = "MF-1's modes, chosen at power-on"
 repo = "https://github.com/IanButterworth/mf-1"

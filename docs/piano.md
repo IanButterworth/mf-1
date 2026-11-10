@@ -48,6 +48,11 @@ repository, and the engine plays no samples. `Sources/PianoCore/tools/` holds th
 - **Dampers and pedal.** A key's damper lifts while it is held or the pedal is down; released, the strings die in
   0.8 s (bass) to 0.3 s (treble). Above F6 there are no dampers. The damping times are inferred, not measured: the
   recordings hold every note to its end.
+- **The output.** A limiter holds peaks at 0.85 of full scale, acting at once on a peak and recovering over 150 ms; a
+  single note never reaches it, only a dense loud chord. On the FM-1, while its own speaker plays, a 160 Hz high-pass
+  (12 dB an octave) keeps the bass's fundamentals from driving the small speaker into distortion; with headphones in
+  the full bass comes back. The app never applies it. Volume 70 puts a C4 at ff at the level of the FM-1's own piano
+  preset.
 - **The pool.** At most 384 oscillators sound, in the app and on the FM-1 alike. A note takes its loudest partials
   first; when the pool is full, a new partial replaces the quietest sounding one, if it is louder. Partials stop at
   about -110 dB. On the FM-1 the budget also follows the audio interrupt's load (it drops above 80% and recovers below
@@ -98,6 +103,8 @@ while a key or the pedal holds them.
   darker than the app.
 - Release times, sympathetic resonance with the pedal down, and the damper's own noise are not measured. Sympathetic
   resonance is not modelled yet.
-- The FM-1's CPU load at 384 oscillators has not been measured; the budget of 384 is an estimate.
+- Piano has run on one FM-1 (2026-11-10): it boots, plays and logged no crash. The first build was quiet and its bass
+  distorted the speaker, which the louder level and the speaker's high-pass address. The CPU load at 384 oscillators
+  has not been measured; the budget is an estimate, guarded by the load-following budget.
 - The soundboard rings for 100 ms or more. Above 1.5 kHz the recordings' strike looks more like a 2 ms click than a
   ring, so the board's ring may be too long; not yet changed.

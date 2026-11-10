@@ -69,6 +69,11 @@ typedef struct {
   float stretch;     // the octaves' stretch, times the measured
   float release;     // the dampers' rates, times the inferred
   float soft_db;     // the top's extra fall per octave at mf
+  // The output: a limiter that holds peaks at its ceiling, instant on a peak and recovering over 150 ms; and, only
+  // while the FM-1's own speaker plays, a high-pass that keeps bass it cannot move from driving it into distortion.
+  float lim_env, lim_rel, lim_top;
+  int speaker;
+  float hp_b0, hp_b1, hp_b2, hp_a1, hp_a2, hp_x1, hp_x2, hp_y1, hp_y2;
   float level[PN_NOTES];  // each note's sound, squared amplitude summed, for the screen
   pn_cand_t cand[PN_CANDS];  // a note-on's scratch, here rather than on the audio interrupt's small stack
 } pn_piano_t;
@@ -78,6 +83,8 @@ void pn_note_on(pn_piano_t* p, int note, int vel);
 void pn_note_off(pn_piano_t* p, int note);
 void pn_pedal(pn_piano_t* p, int down);
 void pn_all_off(pn_piano_t* p);
+// The FM-1's speaker is playing (1) or headphones are (0): the speaker gets the high-pass.
+void pn_set_speaker(pn_piano_t* p, int on);
 // One block of PN_BLOCK samples, mono, written to out.
 void pn_render(pn_piano_t* p, float* out);
 

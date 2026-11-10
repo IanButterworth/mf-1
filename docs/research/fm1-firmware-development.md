@@ -117,6 +117,17 @@ flash, it expects to own the chip from a fixed address with its own boot area, a
 fm1-base firmware would need a chainloader at the start of flash, the kind of write that bricks a unit when it goes
 wrong.
 
+### Piano on the unit (2026-11-10)
+
+Two builds of the modes firmware with Piano, each installed through TransitFM1 (two classic installs, exit 0 each):
+package SHA-256 `a7fd5a06…`, then `ff1097e1…`. Both boot to `FM-1_5000`, play every mode and logged no crash.
+- The first build was quiet and its bass notes distorted the speaker. A C4 at ff peaked about 8 dB below the FM-1's
+  own piano preset, and the engine's peaks were far from full scale, so the distortion is the small speaker's
+  excursion, not clipping [observed by ear, inferred].
+- The second raises Piano's level by 8 dB, adds a limiter at 0.85 of full scale, and puts a 160 Hz high-pass on the
+  output while the speaker plays, from fm1-base's jack reading (`plat_headphones`, PB5) [measured on the Mac].
+- Not yet measured: the audio load with 384 partials (`plat_cpu_pct` would give it) and how the speaker sounds now.
+
 ## Sources
 
 - awesome-fm-1: https://github.com/cicloid/awesome-fm-1 (index; recovery and development sections)

@@ -151,6 +151,8 @@ static void pi_frame(uint32_t now)
     if (now - pi_guard_at < 100u)
         return;
     pi_guard_at = now;
+    /* the speaker unless headphones are in: it gets the high-pass */
+    pn_set_speaker(&pi_piano, plat_headphones() != 1);
     load = plat_cpu_pct();
     if (load > 80u && b > 128)
         b -= 32;

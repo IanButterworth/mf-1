@@ -52,7 +52,10 @@ void piano_setting(pn_piano_t* p, int id, int v) {
   switch (id) {
     case PN_F_TONE: p->tilt = (float)(v - 50) * 0.12f; break;
     case PN_F_SUSTAIN: p->decay = 100.0f / (float)clampi(v, 1, 1000); break;
-    case PN_F_VOLUME: p->gain = 0.55f * (float)v / 70.0f; break;
+    case PN_F_VOLUME:
+      p->gain = 1.4f * (float)v / 70.0f;
+      p->cull2 = 4e-11f * p->gain * p->gain;  // partials stop about 110 dB below full, however loud the volume
+      break;
     case PN_F_UNISON: p->beat = (float)v / 100.0f; break;
     case PN_F_KNOCK: p->knock = (float)v / 100.0f; break;
     case PN_F_STRETCH: p->stretch = (float)v / 100.0f; break;
