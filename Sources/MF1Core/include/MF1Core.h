@@ -159,6 +159,30 @@ double mf1_sample_rate(void);
 void mf1_latency(double out[6]);
 const char* mf1_midi_port_name(void);
 
+// ---- a mode's own instrument
+// An engine of a mode's own that plays in place of the DX7 voices: the keys, MIDI, the arpeggiator, the sequencer
+// and songs reach it as notes, and its sound goes through the effects and the output stage as theirs would. The
+// audio thread makes every call, so none of them may lock, allocate or block.
+typedef struct {
+  void* self;
+  void (*prepare)(void* self, double sampleRate);
+  void (*note_on)(void* self, int note, int velocity);
+  void (*note_off)(void* self, int note);
+  void (*sustain)(void* self, int down);
+  void (*all_off)(void* self);
+  void (*set)(void* self, int id, int value);
+  // 64 samples, 1.0 full scale. Returns how many voices or partials sound, for the status.
+  int (*render)(void* self, float* out);
+} mf1_instrument_t;
+// Takes over from the DX7 voices; NULL gives them back. The struct must outlive its use.
+void mf1_set_instrument(const mf1_instrument_t* instrument);
+// Hands a setting to the instrument's set, on the audio thread.
+void mf1_instrument_set(int id, int value);
+// The sustain pedal, as MIDI CC64 would press it.
+void mf1_sustain(bool down);
+// Plays a key with a velocity of its own, as a touch-sensitive key would.
+void mf1_key_down_velocity(int note, int velocity);
+
 // ---- offline rendering, for tests and benchmarks; no audio device.
 void mf1_offline_init(double sampleRate);
 void mf1_offline_render(float* out, int frames);

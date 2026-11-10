@@ -811,6 +811,19 @@ void mf1_key_down(int note) {
   E()->keyDown(note, E()->globals.keyVelocity, true);
 }
 
+void mf1_key_down_velocity(int note, int velocity) {
+  LOCK;
+  E()->keyDown(note, std::max(1, std::min(127, velocity)), true);
+}
+
+void mf1_set_instrument(const mf1_instrument_t* instrument) {
+  E()->synth.instrument.store(instrument, std::memory_order_release);
+}
+
+void mf1_sustain(bool down) { E()->send(Command(Command::Sustain, down ? 127 : 0)); }
+
+void mf1_instrument_set(int id, int value) { E()->send(Command(Command::InstrumentSet, id, value)); }
+
 void mf1_key_up(int note) {
   LOCK;
   E()->keyUp(note, true);

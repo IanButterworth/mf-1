@@ -133,6 +133,11 @@ void Synth::keyupVoice(VoiceSlot& v) {
 
 uint32_t Synth::playNote(int note, int velocity) {
   note = std::max(0, std::min(127, note));
+  if (inst_) {
+    inst_->note_on(inst_->self, note, velocity);
+    instHeld_[note] = true;
+    return instSerial_[note] = ++nextSerial_;
+  }
   lfo_.keydown();
   double glide = g_.glideTime / 100.0;
   if (edit_.mono) {
@@ -217,6 +222,11 @@ void Synth::monoDrop(int index) {
 }
 
 void Synth::releaseNote(int note) {
+  if (inst_) {
+    if (instHeld_[note & 127]) inst_->note_off(inst_->self, note & 127);
+    instHeld_[note & 127] = false;
+    return;
+  }
   if (edit_.mono) {
     for (int i = 0; i < monoCount_; i++)
       if (monoStack_[i].note == note) {
@@ -239,6 +249,10 @@ void Synth::releaseNote(int note) {
 // A timed note-off releases only the note-on it belongs to, so it cannot cut
 // a later note on the same pitch short.
 void Synth::releaseSerial(uint32_t serial, int note) {
+  if (inst_) {
+    if (instSerial_[note & 127] == serial) releaseNote(note);
+    return;
+  }
   if (edit_.mono) {
     for (int i = 0; i < monoCount_; i++)
       if (monoStack_[i].serial == serial) {
@@ -259,6 +273,10 @@ void Synth::releaseSerial(uint32_t serial, int note) {
 }
 
 void Synth::allNotesOff() {
+  if (inst_) {
+    inst_->all_off(inst_->self);
+    memset(instHeld_, 0, sizeof(instHeld_));
+  }
   for (auto& v : voices_) {
     if (v.active && (v.keyDown || v.sustained)) keyupVoice(v);
     v.keyDown = false;
@@ -649,8 +667,12 @@ void Synth::handle(const Command& c) {
           }
       }
       sustain_ = on;
+      if (inst_) inst_->sustain(inst_->self, on);
       break;
     }
+    case Command::InstrumentSet:
+      if (inst_) inst_->set(inst_->self, c.a, c.b);
+      break;
     case Command::AllNotesOff:
       allNotesOff();
       break;
@@ -797,6 +819,13 @@ float Synth::envStep(int value, bool release) const {
 }
 
 void Synth::renderBlock() {
+  const mf1_instrument_t* in = instrument.load(std::memory_order_acquire);
+  if (in != inst_) {
+    if (inst_) inst_->all_off(inst_->self);
+    memset(instHeld_, 0, sizeof(instHeld_));
+    inst_ = in;
+    if (inst_) inst_->prepare(inst_->self, sr_);
+  }
   Command c;
   while (uiQueue.pop(c)) handle(c);
   while (midiQueue.pop(c)) handle(c);
@@ -804,6 +833,15 @@ void Synth::renderBlock() {
   advanceClock(N);
   sampleTime_ += N;
 
+  if (inst_) {
+    int n = inst_->render(inst_->self, instBuf_);
+    for (int i = 0; i < N; i++) {
+      float x = std::max(-1.f, std::min(1.f, instBuf_[i]));
+      acc_[i] = (int32_t)(x * (float)((1 << 24) - 1));
+    }
+    activeVoices.store(n, std::memory_order_relaxed);
+    return;
+  }
   int32_t lfoVal = lfo_.getsample();
   int32_t lfoDelay = lfo_.getdelay();
   memset(acc_, 0, sizeof(acc_));
@@ -864,6 +902,13 @@ void Synth::renderBlock() {
 
 void Synth::updateSounding() {
   uint64_t lo = 0, hi = 0;
+  if (inst_) {
+    for (int n = 0; n < 128; n++)
+      if (instHeld_[n]) (n < 64 ? lo : hi) |= 1ull << (n & 63);
+    soundingLo.store(lo, std::memory_order_relaxed);
+    soundingHi.store(hi, std::memory_order_relaxed);
+    return;
+  }
   for (auto& v : voices_) {
     if (!v.active || v.note < 0 || !(v.keyDown || v.sustained)) continue;
     if (v.note < 64)

@@ -6,6 +6,7 @@
 #include "dsp/dx7_voice.h"
 #include "fx.h"
 #include "spsc_queue.h"
+#include "MF1Core.h"
 
 namespace mf1 {
 
@@ -109,7 +110,7 @@ struct Command {
     NoteOn, NoteOff, LoadPreset, SetEdit, SetBankPreset, SetVoiceParam, SetGlobals, MuteOps,
     PitchBend, ModWheel, Breath, Foot, Aftertouch, Sustain, AllNotesOff, ArpEnable, SetArp,
     SeqEnable, SetPattern, SelectPattern, Play, Stop, ClockTick, ClockStart, ClockStop,
-    SongClear, SongAdd, SongPlay, SongStop,
+    SongClear, SongAdd, SongPlay, SongStop, InstrumentSet,
   } type;
   int a = 0, b = 0, c = 0;
   uint64_t stamp = 0;  // mach_absolute_time when queued
@@ -157,6 +158,8 @@ class Synth {
   std::atomic<float> peak{0};
   // -1 left .. 1 right: where this window sits among the app's other windows. 0 leaves the output untouched.
   std::atomic<float> pan{0};
+  // A mode's own instrument, in place of the DX7 voices when set.
+  std::atomic<const mf1_instrument_t*> instrument{nullptr};
   // Time the last note-on waited in the queue before the audio thread took it.
   std::atomic<uint64_t> lastNoteQueueNs{0};
   static constexpr int kScopeSize = 4096;
@@ -294,6 +297,12 @@ class Synth {
   // Output stage
   float hpState_ = 0, hpPrev_ = 0, lpState_ = 0;
   float hpCoef_ = 1, lpCoef_ = 1;
+
+  // The instrument's keys down, and the serial each was struck with, for timed note-offs and the LEDs.
+  const mf1_instrument_t* inst_ = nullptr;
+  bool instHeld_[128] = {};
+  uint32_t instSerial_[128] = {};
+  float instBuf_[N];
 
   int32_t acc_[N];
   int32_t tmp_[N];
