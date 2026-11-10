@@ -23,6 +23,7 @@ struct PhaseApp: App {
         .commands {
             CommandGroup(replacing: .appSettings) {}
             CommandGroup(replacing: .newItem) {
+                NewWindowItems()
                 Button("Export Sound Bank…") { PhaseApp.exportSounds() }.keyboardShortcut("e")
                 Button("Export Current Voice…") { Engine.exportVoice() }.keyboardShortcut("e", modifiers: [.command, .shift])
                 Divider()

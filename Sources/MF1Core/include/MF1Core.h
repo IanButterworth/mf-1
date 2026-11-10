@@ -146,6 +146,8 @@ void mf1_scope(float* out, int n);
 float mf1_cpu_load(void);
 int mf1_active_voices(void);
 float mf1_peak(void);
+// Where this window's sound sits, -1 left .. 1 right, among the app's other windows. Not saved; 0 is unchanged.
+void mf1_set_pan(float pan);
 // Increments when something other than the UI changed the model (MIDI,
 // SysEx, the sequencer switching voice), so the UI knows to refresh.
 uint32_t mf1_generation(void);

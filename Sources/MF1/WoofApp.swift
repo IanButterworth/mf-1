@@ -22,6 +22,7 @@ struct WoofApp: App {
         .commands {
             CommandGroup(replacing: .appSettings) {}
             CommandGroup(replacing: .newItem) {
+                NewWindowItems()
                 Button("Export Dog Bank…") { WoofApp.exportDogs() }.keyboardShortcut("e")
                 Button("Export Current Voice…") { Engine.exportVoice() }.keyboardShortcut("e", modifiers: [.command, .shift])
                 Divider()

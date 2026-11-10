@@ -155,6 +155,8 @@ class Synth {
   std::atomic<int> activeVoices{0};
   std::atomic<float> cpuLoad{0};
   std::atomic<float> peak{0};
+  // -1 left .. 1 right: where this window sits among the app's other windows. 0 leaves the output untouched.
+  std::atomic<float> pan{0};
   // Time the last note-on waited in the queue before the audio thread took it.
   std::atomic<uint64_t> lastNoteQueueNs{0};
   static constexpr int kScopeSize = 4096;
@@ -261,9 +263,11 @@ class Synth {
   double widePhase_ = 0;
   float wideAmount_ = 0;  // smoothed width, 0..1
   float blockR_[N];
+  float panL_ = 1, panR_ = 1;
 
   void advanceSong(int frames);
   void widen();
+  void placeWindow();
   void stopSong();
   double phase_ = 0;
   int stepCount_ = 0;

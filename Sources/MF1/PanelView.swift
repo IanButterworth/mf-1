@@ -32,6 +32,9 @@ struct PanelView<M: PanelDriver>: View {
                 octButtons(s)
                 buttonGrid(s)
                 keybed(s)
+                if frameless && !Snapshot.active {
+                    WindowCloseButton(s: s).position(at(5.5, 5.5, s))
+                }
             }
             .coordinateSpace(name: "panel")
         }
@@ -256,6 +259,32 @@ struct PanelView<M: PanelDriver>: View {
 }
 
 // The panel's measurements in millimetres, from the photo.
+// With other windows open, a frameless window gets a small close button in the case's top left corner. It is
+// faint, and darkens when the pointer is over it.
+struct WindowCloseButton: View {
+    var s: CGFloat
+    @ObservedObject private var windows = OpenWindows.shared
+    @State private var hover = false
+
+    var body: some View {
+        if windows.several {
+            let r = 1.2 * s
+            ZStack {
+                Circle().fill(Color.black.opacity(hover ? 0.55 : 0.25))
+                Circle().stroke(Color.white.opacity(hover ? 0.35 : 0.14), lineWidth: max(0.5, 0.08 * s))
+                Image(systemName: "xmark")
+                    .font(.system(size: r * 0.85, weight: .bold))
+                    .foregroundColor(.white.opacity(hover ? 0.9 : 0.5))
+            }
+            .frame(width: r * 2, height: r * 2)
+            .contentShape(Circle())
+            .onHover { hover = $0 }
+            .onTapGesture { NSApp.windows.first { $0 is PanelWindow }?.performClose(nil) }
+            .help("Close this window")
+        }
+    }
+}
+
 enum PanelMetrics {
     static let width: CGFloat = 161.5
     static let height: CGFloat = 96.5

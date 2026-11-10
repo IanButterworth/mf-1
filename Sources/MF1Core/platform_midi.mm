@@ -144,6 +144,16 @@ struct MidiIO::Impl {
   std::vector<std::unique_ptr<UmpParser>> retired;
   UmpParser virtualParser;
 
+  // Another MF-1 window's port sends what that window plays. Listening to it would play one window's notes in
+  // every other window, so those ports are left out; a real FM-1, keyboards and DAWs are still heard.
+  static bool isMF1Window(MIDIEndpointRef src) {
+    CFStringRef name = nullptr;
+    if (MIDIObjectGetStringProperty(src, kMIDIPropertyName, &name) != noErr || !name) return false;
+    bool ours = CFStringHasSuffix(name, CFSTR(" (FM-1 Compatible)"));
+    CFRelease(name);
+    return ours;
+  }
+
   void connectAll() {
     std::lock_guard<std::mutex> g(lock);
     retired.clear();
@@ -152,7 +162,7 @@ struct MidiIO::Impl {
     for (ItemCount i = 0; i < n; i++) {
       MIDIEndpointRef src = MIDIGetSource(i);
       present.insert(src);
-      if (src == virtualSource || parsers.count(src)) continue;
+      if (src == virtualSource || parsers.count(src) || isMF1Window(src)) continue;
       auto parser = std::make_unique<UmpParser>();
       if (MIDIPortConnectSource(inPort, src, parser.get()) == noErr) parsers[src] = std::move(parser);
     }

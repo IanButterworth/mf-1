@@ -22,6 +22,7 @@ struct AlmanacApp: App {
         .commands {
             CommandGroup(replacing: .appSettings) {}
             CommandGroup(replacing: .newItem) {
+                NewWindowItems()
                 Button("Export Month Bank…") { AlmanacApp.exportMonths() }.keyboardShortcut("e")
                 Button("Export Current Voice…") { Engine.exportVoice() }.keyboardShortcut("e", modifiers: [.command, .shift])
                 Divider()

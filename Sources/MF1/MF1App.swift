@@ -29,6 +29,7 @@ struct MF1App: App {
         .commands {
             CommandGroup(replacing: .appSettings) {}
             CommandGroup(replacing: .newItem) {
+                NewWindowItems()
                 Button("Import SysEx…") { Engine.openImportPanel() }.keyboardShortcut("o")
                 Menu("Export Bank") {
                     ForEach(0..<5) { b in
@@ -146,15 +147,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let w = PanelWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 1180 * PanelMetrics.height / PanelMetrics.width),
                             styleMask: [.borderless], backing: .buffered, defer: false)
         w.contentView = PanelHostingView(rootView: ContentView(model: DeviceModel.shared))
-        w.title = "MF-1"
+        w.title = Engine.name
         // Only the bare case moves the window, so drags on knobs, keys and sliders never do.
         w.isMovableByWindowBackground = false
         w.contentAspectRatio = NSSize(width: PanelMetrics.width, height: PanelMetrics.height)
         w.isReleasedWhenClosed = false
         window = w
         setFrameless(UserDefaults.standard.object(forKey: "frameless") as? Bool ?? true)
-        if !w.setFrameUsingName("MF1Panel") { w.center() }
-        w.setFrameAutosaveName("MF1Panel")
+        w.placeAndRemember("MF1Panel")
         w.makeKeyAndOrderFront(nil)
         model = DeviceModel.shared
         let quirks = UserDefaults.standard.object(forKey: "quirks") as? Bool ?? true
@@ -371,6 +371,19 @@ enum Snapshot {
 // Clicking a key while another app is in front plays it, rather than only
 // bringing the window forward.
 // View › iScream Mode, Almanac Mode, Woof Mode and Phase Mode, the same in every mode. Turning one off goes back to MF-1.
+// Another window of this mode, or of any other, each a separate instance with its own sound and MIDI port.
+struct NewWindowItems: View {
+    var body: some View {
+        Button("New \(Engine.mode.title) Window") { Engine.openWindow(Engine.mode) }.keyboardShortcut("n")
+        Menu("New Window") {
+            ForEach(Engine.Mode.allCases, id: \.self) { m in
+                Button(m.title) { Engine.openWindow(m) }
+            }
+        }
+        Divider()
+    }
+}
+
 struct ModeToggles: View {
     var body: some View {
         ForEach([Engine.Mode.iscream, .almanac, .woof, .phase], id: \.self) { m in
@@ -389,6 +402,178 @@ final class PanelWindow: NSWindow {
     override var canBecomeMain: Bool { true }
     // Borderless windows have no close button, so Command-W closes directly.
     override func performClose(_ sender: Any?) { close() }
+
+    override var contentView: NSView? {
+        didSet {
+            guard let v = contentView else { return }
+            for c in ResizeCorner.Corner.allCases { v.addSubview(ResizeCorner(c, in: v.bounds)) }
+        }
+    }
+
+    // Each window keeps its own place. A numbered window opens a little below and right of the first, until moved.
+    func placeAndRemember(_ name: String) {
+        let slot = Engine.slot
+        let own = slot == 1 ? name : "\(name) \(slot)"
+        if !setFrameUsingName(own) {
+            if slot > 1, setFrameUsingName(name) {
+                let step = CGFloat(slot - 1) * 32
+                setFrameTopLeftPoint(NSPoint(x: frame.minX + step, y: frame.maxY - step))
+            } else {
+                center()
+            }
+        }
+        setFrameAutosaveName(own)
+        windowPan = WindowPan(self)
+    }
+
+    private var windowPan: WindowPan?
+}
+
+// Whether other MF-1 windows are open. It changes only when one opens or closes.
+final class OpenWindows: ObservableObject {
+    static let shared = OpenWindows()
+    @Published var several = false
+}
+
+// With more than one window open, each window's sound is panned to where the window sits across the screens: a
+// window at the left edge plays from the left. With one window open the sound stays centred.
+final class WindowPan {
+    private weak var window: NSWindow?
+    private var observers: [NSObjectProtocol] = []
+    private var timer: Timer?
+    private var others = false
+
+    init(_ window: NSWindow) {
+        self.window = window
+        let nc = NotificationCenter.default
+        for name in [NSWindow.didMoveNotification, NSWindow.didResizeNotification, NSWindow.didChangeScreenNotification] {
+            observers.append(nc.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in self?.update() })
+        }
+        observers.append(nc.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil,
+                                        queue: .main) { [weak self] _ in self?.update() })
+        // Windows open and close in other processes; looking once a second is cheap and follows them.
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.count() }
+        count()
+    }
+
+    deinit {
+        timer?.invalidate()
+        observers.forEach(NotificationCenter.default.removeObserver)
+    }
+
+    private func count() {
+        let now = Engine.openWindows() > 1
+        if now != others {
+            others = now
+            OpenWindows.shared.several = now
+            update()
+        }
+    }
+
+    private func update() {
+        mf1_set_pan(Float(pan()))
+    }
+
+    private func pan() -> CGFloat {
+        guard others, let w = window else { return 0 }
+        let span = NSScreen.screens.reduce(NSRect.null) { $0.union($1.frame) }
+        // The window's middle, from as far left as it can sit to as far right.
+        let lo = span.minX + w.frame.width / 2, hi = span.maxX - w.frame.width / 2
+        guard hi > lo else { return 0 }
+        // Half way at most, so a window at the edge is still heard in both ears.
+        return 0.5 * max(-1, min(1, (w.frame.midX - lo) / (hi - lo) * 2 - 1))
+    }
+}
+
+// A corner of a frameless panel window that resizes it, keeping the panel's shape. A borderless window has no
+// resize edges of its own, and the case's rounded corners leave its corners transparent, which would let clicks
+// through to the window below.
+final class ResizeCorner: NSView {
+    enum Corner: CaseIterable { case topLeft, topRight, bottomLeft, bottomRight }
+
+    private static let size: CGFloat = 18
+    private let corner: Corner
+    private var startFrame = NSRect.zero
+    private var startMouse = NSPoint.zero
+
+    init(_ corner: Corner, in bounds: NSRect) {
+        self.corner = corner
+        let s = Self.size
+        let left = corner == .topLeft || corner == .bottomLeft
+        // The content view is not flipped: y runs up from the bottom.
+        let top = corner == .topLeft || corner == .topRight
+        super.init(frame: NSRect(x: left ? 0 : bounds.width - s, y: top ? bounds.height - s : 0, width: s, height: s))
+        autoresizingMask = [left ? .maxXMargin : .minXMargin, top ? .minYMargin : .maxYMargin]
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    private var active: Bool { window.map { !$0.styleMask.contains(.titled) } ?? false }
+
+    // Almost clear, so the window takes the clicks here; a fully clear pixel lets them through.
+    override func draw(_ dirtyRect: NSRect) {
+        guard active else { return }
+        NSColor(white: 0, alpha: 0.01).setFill()
+        bounds.fill()
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { active ? super.hitTest(point) : nil }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.cursorUpdate, .activeAlways, .inVisibleRect],
+                                       owner: self))
+    }
+
+    override func cursorUpdate(with event: NSEvent) {
+        guard active else { return super.cursorUpdate(with: event) }
+        cursor.set()
+    }
+
+    private var cursor: NSCursor {
+        if #available(macOS 15, *) {
+            let p: NSCursor.FrameResizePosition = switch corner {
+            case .topLeft: .topLeft
+            case .topRight: .topRight
+            case .bottomLeft: .bottomLeft
+            case .bottomRight: .bottomRight
+            }
+            return NSCursor.frameResize(position: p, directions: .all)
+        }
+        return .crosshair
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let w = window else { return }
+        startFrame = w.frame
+        startMouse = NSEvent.mouseLocation
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let w = window, startFrame.width > 0 else { return }
+        let m = NSEvent.mouseLocation
+        let dx = m.x - startMouse.x, dy = m.y - startMouse.y
+        let right = corner == .topRight || corner == .bottomRight
+        let top = corner == .topLeft || corner == .topRight
+        let ratio = startFrame.height / startFrame.width
+        // The panel keeps its shape: follow whichever way the corner moved further.
+        let byX = startFrame.width + (right ? dx : -dx)
+        let byY = startFrame.width + (top ? dy : -dy) / ratio
+        var width = abs(byX - startFrame.width) >= abs(byY - startFrame.width) ? byX : byY
+        let screen = w.screen?.visibleFrame.size ?? NSSize(width: 4000, height: 4000)
+        width = min(max(width, 420), screen.width, screen.height / ratio)
+        let height = width * ratio
+        let frame = NSRect(x: right ? startFrame.minX : startFrame.maxX - width,
+                           y: top ? startFrame.minY : startFrame.maxY - height, width: width, height: height)
+        w.setFrame(frame, display: true)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        window?.invalidateShadow()
+        startFrame = .zero
+    }
 }
 
 // Bare case surface: a drag here moves the window.

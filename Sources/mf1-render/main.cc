@@ -603,6 +603,33 @@ static int test() {
     check(a == 0 && b > 0.01 && c == 0, "extended mode switches on and off during a song");
   }
 
+  // A window at the left plays from the left: the right side fades out, the left keeps its level, and back in
+  // the middle the output is exactly mono again.
+  {
+    std::vector<float> l(48000), r(48000);
+    auto second = [&](double& left, double& right) {
+      for (int i = 0; i < 48000; i += 64) mf1_offline_render_stereo(&l[i], &r[i], 64);
+      left = right = 0;
+      for (int i = 24000; i < 48000; i++) {
+        left = std::max(left, (double)std::fabs(l[i]));
+        right = std::max(right, (double)std::fabs(r[i]));
+      }
+    };
+    double cl, cr, pl, pr, bl, br;
+    mf1_song_play(0);
+    second(cl, cr);
+    mf1_set_pan(-1);
+    second(pl, pr);
+    mf1_set_pan(0);
+    second(bl, br);
+    // Once the 20 ms move back has settled.
+    bool mono = std::equal(l.begin() + 24000, l.end(), r.begin() + 24000);
+    mf1_song_stop();
+    render(48000 * 3);
+    drainOut();
+    check(cl > 0.01 && pl > 0.5 * cl && pr < 1e-3 && mono, "a window at the left plays from the left, and centred is mono");
+  }
+
   // Bank E exists only in extended mode, and starts with the song patches.
   {
     // Offline, a preset change reaches the synth only when audio renders.

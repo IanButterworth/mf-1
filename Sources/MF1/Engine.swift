@@ -9,7 +9,90 @@ import UniformTypeIdentifiers
 enum Engine {
     // The virtual MIDI port name contains "FM-1" so the existing web
     // librarians and editors, which match ports by that substring, find it.
-    static var portName: String { "\(mode.title) (FM-1 Compatible)" }
+    static var portName: String { "\(name) (FM-1 Compatible)" }
+
+    // Each window is an app of its own, because the engine is one per process. A second window of the same mode
+    // is numbered ("MF-1 2"), with its own saved state and MIDI port, so the two never write the same files.
+    static var name: String { slot == 1 ? mode.title : "\(mode.title) \(slot)" }
+
+    static let slot: Int = {
+        // Snapshots and self checks run beside an open app and use the first slot's state without claiming it.
+        let args = CommandLine.arguments
+        if args.contains("--snapshot") || args.contains("--selfcheck") { return 1 }
+        for n in 1...9 where claim(n) { return n }
+        return 1
+    }()
+
+    private static var claimed: Int32 = -1
+
+    // A lock held for the app's life marks a slot as taken. The system lets it go when the app quits or crashes.
+    private static func claim(_ n: Int) -> Bool {
+        let dir = directory(slot: n)
+        let fresh = !FileManager.default.fileExists(atPath: dir.path)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let fd = open(dir.appendingPathComponent(".open").path, O_RDWR | O_CREAT, 0o644)
+        guard fd >= 0 else { return false }
+        // Other windows look at the lock for a moment once a second, so a busy lock is tried again before the
+        // slot counts as taken.
+        var held = false
+        for _ in 0..<3 {
+            if flock(fd, LOCK_EX | LOCK_NB) == 0 { held = true; break }
+            usleep(5000)
+        }
+        guard held else {
+            close(fd)
+            return false
+        }
+        claimed = fd
+        // A new window starts from what the first one last saved.
+        if fresh && n > 1 { copySavedState(from: directory(slot: 1), to: dir) }
+        return true
+    }
+
+    // How many windows are open, in every mode: the slots whose lock is held, this one's included.
+    static func openWindows() -> Int {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        var n = 0
+        for m in Mode.allCases {
+            for s in 1...9 {
+                let path = base.appendingPathComponent(s == 1 ? m.title : "\(m.title) \(s)")
+                    .appendingPathComponent(".open").path
+                let fd = open(path, O_RDONLY)
+                guard fd >= 0 else { continue }
+                if flock(fd, LOCK_SH | LOCK_NB) != 0 { n += 1 } else { flock(fd, LOCK_UN) }
+                close(fd)
+            }
+        }
+        return n
+    }
+
+    private static func copySavedState(from src: URL, to dst: URL) {
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(at: src, includingPropertiesForKeys: nil) else { return }
+        for f in files where f.lastPathComponent != ".open" && f.lastPathComponent != "Songs" {
+            try? fm.copyItem(at: f, to: dst.appendingPathComponent(f.lastPathComponent))
+        }
+    }
+
+    private static func directory(slot n: Int) -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent(n == 1 ? mode.title : "\(mode.title) \(n)", isDirectory: true)
+    }
+
+    // Opens another window: a new instance of the app in the given mode.
+    static func openWindow(_ m: Mode) {
+        let app = Bundle.main.bundleURL
+        guard app.pathExtension == "app" else {
+            alert("New windows open only from the built app.")
+            return
+        }
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        config.arguments = ["--\(m.rawValue)"]
+        NSWorkspace.shared.openApplication(at: app, configuration: config) { _, error in
+            if let error { DispatchQueue.main.async { alert(error.localizedDescription) } }
+        }
+    }
 
     // One app, five faces: the MF-1 emulator, iScream, Almanac, Woof and Phase. The mode is picked at launch,
     // because each has its own engine state and MIDI port. Snapshots render MF-1 unless --iscream,
@@ -21,6 +104,7 @@ enum Engine {
 
     static let mode: Mode = {
         let args = CommandLine.arguments
+        if args.contains("--mf1") { return .mf1 }
         if args.contains("--iscream") { return .iscream }
         if args.contains("--almanac") { return .almanac }
         if args.contains("--woof") { return .woof }
@@ -51,8 +135,14 @@ enum Engine {
     }
 
     static var stateDirectory: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let dir = base.appendingPathComponent(mode.title, isDirectory: true)
+        let dir = directory(slot: slot)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    // What every window of a mode shares: the user's song files.
+    static var sharedDirectory: URL {
+        let dir = directory(slot: 1)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -208,7 +298,7 @@ final class SongLibrary: ObservableObject {
     @Published private(set) var songs: [Entry] = []
 
     static var folder: URL {
-        let dir = Engine.stateDirectory.appendingPathComponent("Songs", isDirectory: true)
+        let dir = Engine.sharedDirectory.appendingPathComponent("Songs", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }

@@ -1358,6 +1358,7 @@ void mf1_scope(float* out, int n) {
 float mf1_cpu_load(void) { return E()->synth.cpuLoad.load(); }
 int mf1_active_voices(void) { return E()->synth.activeVoices.load(); }
 float mf1_peak(void) { return E()->synth.peak.load(); }
+void mf1_set_pan(float pan) { E()->synth.pan.store(pan, std::memory_order_relaxed); }
 
 uint32_t mf1_generation(void) {
   {

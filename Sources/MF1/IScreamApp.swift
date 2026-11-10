@@ -22,6 +22,7 @@ struct IScreamApp: App {
         .commands {
             CommandGroup(replacing: .appSettings) {}
             CommandGroup(replacing: .newItem) {
+                NewWindowItems()
                 Button("Export Flavor Bank…") { IScreamApp.exportFlavors() }.keyboardShortcut("e")
                 Button("Export Current Voice…") { Engine.exportVoice() }.keyboardShortcut("e", modifiers: [.command, .shift])
                 Divider()

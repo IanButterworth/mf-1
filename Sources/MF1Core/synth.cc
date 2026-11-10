@@ -522,6 +522,24 @@ void Synth::widen() {
   }
 }
 
+// With several windows open, each one's sound sits where its window is: the far side is turned down, the near
+// side kept at full level, so the level of a centred window does not change. It acts after everything else and
+// never touches the FM-1's own signal; with one window the pan is 0 and the output is unchanged.
+void Synth::placeWindow() {
+  float p = std::max(-1.f, std::min(1.f, pan.load(std::memory_order_relaxed)));
+  float l = p > 0 ? std::cos(p * (float)M_PI_2) : 1.f, r = p < 0 ? std::cos(-p * (float)M_PI_2) : 1.f;
+  if (l == 1.f && r == 1.f && panL_ == 1.f && panR_ == 1.f) return;
+  for (int i = 0; i < N; i++) {
+    // About 20 ms to settle, so a window dragged across the screen moves smoothly.
+    panL_ += (l - panL_) * 0.001f;
+    panR_ += (r - panR_) * 0.001f;
+    block_[i] *= panL_;
+    blockR_[i] *= panR_;
+  }
+  if (std::fabs(panL_ - l) < 1e-4f) panL_ = l;
+  if (std::fabs(panR_ - r) < 1e-4f) panR_ = r;
+}
+
 // ------------------------------------------------------------------ songs
 
 void Synth::advanceSong(int frames) {
@@ -891,6 +909,7 @@ void Synth::render(float* out, float* right, int frames) {
       }
       scopePos.store(sp + N, std::memory_order_release);
       widen();
+      placeWindow();
       blockPos_ = 0;
     }
     int n = std::min(frames - done, N - blockPos_);

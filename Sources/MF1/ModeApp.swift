@@ -34,14 +34,13 @@ class ModeDelegate: NSObject, NSApplicationDelegate {
         let w = PanelWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 1180 * PanelMetrics.height / PanelMetrics.width),
                             styleMask: [.borderless], backing: .buffered, defer: false)
         w.contentView = makeContent()
-        w.title = title
+        w.title = Engine.slot == 1 ? title : "\(title) \(Engine.slot)"
         w.isMovableByWindowBackground = false
         w.contentAspectRatio = NSSize(width: PanelMetrics.width, height: PanelMetrics.height)
         w.isReleasedWhenClosed = false
         window = w
         setFrameless(UserDefaults.standard.object(forKey: "frameless") as? Bool ?? true)
-        if !w.setFrameUsingName(frameName) { w.center() }
-        w.setFrameAutosaveName(frameName)
+        w.placeAndRemember(frameName)
         w.makeKeyAndOrderFront(nil)
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] e in
             self?.handle(e) == true ? nil : e

@@ -116,8 +116,14 @@ song's notes and keeps its voice and effects. Other files play with the current 
 files are not bundled with the app: add your own.
 
 Hold SAVE to save, as on the hardware. The window is frameless by default: drag any bare part of
-the case to move it, and use ⌘W or ⌘Q to close. View › Frameless Window (⌃⌘F) switches to a
-normal window. Help › MF-1 Keyboard and Controls lists the rest.
+the case to move it, drag a corner to resize it, and use ⌘W or ⌘Q to close. View › Frameless Window
+(⌃⌘F) switches to a normal window. File › New Window (⌘N) opens another emulator, in this mode or any
+other. Each window is a separate instance with its own sound. A second window of the same mode is
+numbered, with its own saved state and MIDI port ("MF-1 2 (FM-1 Compatible)"), and starts from what
+the first last saved. With more than one window open, each one's sound comes from where the window
+sits: one at the left edge of the screens leans to the left, still heard in both ears, and dragging it
+across moves the sound with it. The panning comes after everything else and leaves the FM-1's sound itself alone; with one
+window open the output is unchanged. Help › MF-1 Keyboard and Controls lists the rest.
 
 ## iScream
 
