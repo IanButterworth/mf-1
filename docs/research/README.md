@@ -26,3 +26,8 @@ changed in MF-1 as a result.
   emulates V15 (open question 9). Started iScream's firmware on fm1-base (`fm1-firmware-development.md`).
   Sources: awesome-fm-1, FM1 Open, Felucca, felucca-bsp, fm1-base, Dinghy, foma,
   setup-fm1-toolchain, the release notes, fwradar, Drey Andersson and Synth Anatomy.
+- 2026-11-10: piano measurements for Piano mode (`../piano.md`): the University of Iowa's Steinway B, every third key
+  at pp, mf and ff (https://theremin.music.uiowa.edu/MISpiano.html), measured only. Inharmonicity, tuning stretch,
+  per-partial levels, two-stage decays and beats, bass longitudinal modes, and the knock [measured]. Damper times
+  [inferred]. Also found: fm1-base reads key velocity and pressure (`APP_TOUCH`) and reports the audio load
+  (`plat_cpu_pct`); the CPU runs at 360 MHz (felucca-bsp `docs/CPU.md`).

@@ -94,12 +94,12 @@ enum Engine {
         }
     }
 
-    // One app, five faces: the MF-1 emulator, iScream, Almanac, Woof and Phase. The mode is picked at launch,
+    // One app, six faces: the MF-1 emulator, iScream, Almanac, Woof, Phase and Piano. The mode is picked at launch,
     // because each has its own engine state and MIDI port. Snapshots render MF-1 unless --iscream,
-    // --almanac, --woof or --phase is given, whatever mode was last used.
+    // --almanac, --woof, --phase or --piano is given, whatever mode was last used.
     enum Mode: String, CaseIterable {
-        case mf1, iscream, almanac, woof, phase
-        var title: String { ["MF-1", "iScream", "Almanac", "Woof", "Phase"][Self.allCases.firstIndex(of: self)!] }
+        case mf1, iscream, almanac, woof, phase, piano
+        var title: String { ["MF-1", "iScream", "Almanac", "Woof", "Phase", "Piano"][Self.allCases.firstIndex(of: self)!] }
     }
 
     static let mode: Mode = {
@@ -109,6 +109,7 @@ enum Engine {
         if args.contains("--almanac") { return .almanac }
         if args.contains("--woof") { return .woof }
         if args.contains("--phase") { return .phase }
+        if args.contains("--piano") { return .piano }
         if args.contains("--snapshot") { return .mf1 }
         let d = UserDefaults.standard
         if let saved = d.string(forKey: "appMode"), let m = Mode(rawValue: saved) { return m }

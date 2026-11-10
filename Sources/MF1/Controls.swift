@@ -94,6 +94,16 @@ struct Finish {
                               knobCap: [Color(hex: 0x2c2c2c), Color(hex: 0x0e0e0e)],
                               knobBump: [Color(hex: 0x505050), Color(hex: 0x181818)],
                               knobDot: Color(hex: 0xd7261e), playButton: Color(hex: 0xd7261e))
+
+    // Piano's own finish: a black lacquer case, ivory keys and brass knobs, as on a concert grand.
+    static let piano = Finish(name: "Piano", caseTop: Color(hex: 0x1c1b1a), caseBottom: Color(hex: 0x0c0b0b),
+                              keybed: Color(hex: 0xf1ebdc), tray: Color(hex: 0x0a0a0a),
+                              button: Color(hex: 0x161514), legend: Color(hex: 0xf2ebdd), unlitLegend: Color(hex: 0x6f675c),
+                              label: Color(hex: 0xd9c48f), keyLabel: Color(hex: 0x6f675c), slit: Color(hex: 0xc9bfa8),
+                              knobSkirt: [Color(hex: 0xc9a44c), Color(hex: 0x6e5522)],
+                              knobCap: [Color(hex: 0xf0d995), Color(hex: 0xa98535)],
+                              knobBump: [Color(hex: 0xfff2c6), Color(hex: 0x9b7a30)],
+                              knobDot: Color(hex: 0x1c1b1a))
 }
 
 extension Color {

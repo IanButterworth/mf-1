@@ -370,7 +370,7 @@ enum Snapshot {
 
 // Clicking a key while another app is in front plays it, rather than only
 // bringing the window forward.
-// View › iScream Mode, Almanac Mode, Woof Mode and Phase Mode, the same in every mode. Turning one off goes back to MF-1.
+// View › iScream Mode, Almanac Mode, Woof Mode, Phase Mode and Piano Mode, the same in every mode. Turning one off goes back to MF-1.
 // Another window of this mode, or of any other, each a separate instance with its own sound and MIDI port.
 struct NewWindowItems: View {
     var body: some View {
@@ -386,7 +386,7 @@ struct NewWindowItems: View {
 
 struct ModeToggles: View {
     var body: some View {
-        ForEach([Engine.Mode.iscream, .almanac, .woof, .phase], id: \.self) { m in
+        ForEach([Engine.Mode.iscream, .almanac, .woof, .phase, .piano], id: \.self) { m in
             Toggle("\(m.title) Mode", isOn: Binding(get: { Engine.mode == m }, set: { Engine.switchMode(to: $0 ? m : .mf1) }))
         }
     }

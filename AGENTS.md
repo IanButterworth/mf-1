@@ -111,8 +111,8 @@ Licences matter when reading community code:
   the song library and the audio output list.
   - `PanelView` is generic over `PanelDriver` (`PanelDriver.swift`): `DeviceModel` drives MF-1,
     `IScreamModel` drives iScream. Anything new that the panel needs from its model goes on the protocol.
-  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`), Almanac, Woof and Phase are modes of the same app (View ›
-    iScream Mode and the rest, or `--iscream`, `--almanac`, `--woof` and `--phase`), picked at launch; `main.swift` picks the front end. Keep MF-1's behaviour unchanged when editing shared panel code,
+  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`), Almanac, Woof, Phase and Piano are modes of the same app (View ›
+    iScream Mode and the rest, or `--iscream`, `--almanac`, `--woof`, `--phase` and `--piano`), picked at launch; `main.swift` picks the front end. Keep MF-1's behaviour unchanged when editing shared panel code,
     and check both with `--snapshot`.
 - `Sources/IScreamCore` (C++17): iScream's flavors, how a sundae becomes an FM-1 voice and effects. It
   uses only the public C API and only what a real FM-1 has (see `docs/iscream.md`).
@@ -129,11 +129,18 @@ Licences matter when reading community code:
   player (`player.cc`) runs them on its own real-time thread and counts the notes parts share (see `docs/phase.md`).
   Its front end is `PhaseModel`, `PhaseScreen` and `PhaseApp`; its paper-white case is `Finish.phase`. `process.c`
   needs no C library and makes every 64-bit product out of line, because the firmware builds the same file.
+- `Sources/PianoCore` (C and C++17): Piano's engine (`piano.c`, plain C with no C library: measured partials as pairs
+  of decaying oscillators, a modal soundboard for the knock, dampers and pedal), its tables (`piano_tables.inc`, made
+  by `tools/gen_tables.py` from measurements of the University of Iowa's recordings, which never go in the repo) and
+  the voicings (`voicings.c`). It plays in place of the DX7 voices through MF1Core's instrument hook
+  (`mf1_set_instrument`); it is not an FM-1 patch, so the parity rule for patches does not apply to it, but the app
+  and the firmware must render the same samples. Front end: `PianoModel`, `PianoScreen`, `PianoApp` (see
+  `docs/piano.md`).
 - `Sources/mf1-render`: headless checks (`main.cc`, `tests_engine.cc`, `iscream_tests.cc`, `almanac_tests.cc`,
-  `woof_tests.cc`, `phase_tests.cc`), benchmark
+  `woof_tests.cc`, `phase_tests.cc`, `piano_tests.cc`), benchmark
   and WAV rendering through the offline C API.
 - `docs/research/`: the specs the emulation is built from.
-- `firmware/fm1-modes`: one firmware for the real FM-1 holding iScream, Almanac, Woof and Phase, chosen at power-on, on
+- `firmware/fm1-modes`: one firmware for the real FM-1 holding iScream, Almanac, Woof, Phase and Piano, chosen at power-on, on
   fm1-base (`firmware/fm1-base`, a submodule). A shared core runs each mode through the interface in `mode.h`; each
   mode's panel and screen is `modes/NAME.c`. Its sound comes from the modes' C ports:
   - `firmware/iscream`: the engine, a C port of MF-1's kept bit for bit equal by `tests/run_parity.sh`, and
@@ -145,6 +152,8 @@ Licences matter when reading community code:
   - `firmware/phase`: Phase's pieces and sounds, a copy of PhaseCore's `process.c`, and its player for the audio
     interrupt. A change to PhaseCore (pieces, sounds, `phase.cc`, `process.c` or `player.cc`) needs `tools/gen_pieces.sh`
     and `tests/run_parity.sh`.
+  - `firmware/piano`: copies of `Sources/PianoCore`'s C files. A change there needs `tools/gen_piano.sh` and
+    `tests/run_parity.sh`.
   Build and test it with the `fm1-firmware` skill. Anything that touches a connected FM-1 goes through the `fm1-device` skill, which asks
   before every write.
 

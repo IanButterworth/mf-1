@@ -4,8 +4,8 @@ Two things for the M-VAVE FM-1 pocket FM synthesizer, sharing one engine:
 
 - **The MF-1 app**: a native macOS emulator of the FM-1. It has the same panel, screens, engine and MIDI/SysEx
   behaviour, so patches, librarians and workflows made for the FM-1 work with it. It also has
-  [iScream](#iscream), [Almanac](#almanac), [Woof](#woof) and [Phase](#phase) modes.
-- **[The modes firmware](#firmware-for-the-fm-1)**: iScream, Almanac, Woof and Phase in one firmware on the FM-1 itself, in
+  [iScream](#iscream), [Almanac](#almanac), [Woof](#woof), [Phase](#phase) and [Piano](#piano) modes.
+- **[The modes firmware](#firmware-for-the-fm-1)**: iScream, Almanac, Woof, Phase and Piano in one firmware on the FM-1 itself, in
   place of M-VAVE's firmware. Their engine renders the same samples as the app.
 
 <p>
@@ -171,11 +171,20 @@ has its own settings folder and MIDI port, and its sounds use only what a real F
 
 ![The eight pieces' scores mid-process, from Two Mallets drifting apart to Tape Bells sliding](docs/images/phase-pieces.jpg)
 
+## Piano
+
+View › Piano Mode turns MF-1 into **Piano**, a grand piano made from measurements of a real one: every third key of a
+Steinway model B at three dynamics, measured partial by partial (inharmonicity, two-stage decays and the beat between a
+key's strings, the bass's longitudinal modes) and the knock of hammer and key on a soundboard of 32 resonant modes.
+It plays by its own engine in place of the DX7 voices, plain C that the FM-1's firmware runs too. Eight voicings, from
+the concert grand as measured to a felt piano and a honky-tonk; MIDI velocity and the sustain pedal; the open grand on
+the screen, its strings glowing as they ring. See `docs/piano.md`.
+
 ## Firmware for the FM-1
 
-`firmware/fm1-modes` builds one firmware for the real FM-1 with iScream, Almanac, Woof and Phase in it. Switch on and
+`firmware/fm1-modes` builds one firmware for the real FM-1 with iScream, Almanac, Woof, Phase and Piano in it. Switch on and
 the last mode used starts; hold a piano key while switching on to choose another (F iScream, G Almanac, A Woof,
-B Phase). It is an app on
+B Phase, C Piano). It is an app on
 [fm1-base](https://github.com/charlesvestal/fm1-base) (a git submodule) and felucca-bsp. Its engine is a C port of
 MF-1's, and parity tests check that it renders the same samples as the app and that each mode gives the desktop's
 voices and effects. The modes share the engine, the panel code and the screen, so each new one costs little room. It
