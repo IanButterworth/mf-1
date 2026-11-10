@@ -1,17 +1,17 @@
 # MF-1's modes on the FM-1
 
-One firmware for the M-VAVE FM-1 that runs MF-1's modes: iScream, Almanac, Woof and Phase. It is an app on
+One firmware for the M-VAVE FM-1 that runs MF-1's modes: iScream, Almanac, Woof, Phase and Piano. It is an app on
 [fm1-base](https://github.com/charlesvestal/fm1-base) (the `../fm1-base` submodule) and felucca-bsp.
 
 - **Choosing a mode:** switch on normally and the last mode used starts (iScream the first time). Hold any piano key
   while switching on for the chooser, let go, then press the key under a mode's name: F for iScream, G for Almanac,
-  A for Woof, B for Phase.
+  A for Woof, B for Phase, C for Piano.
 - **Settings:** each mode keeps its own, in a store object of its own, so switching loses nothing.
 - **Battery:** the bars show the FM-1's own reading, with LOW BATTERY over the screen at the last bar.
 
 It has run on one unit (installed through TransitFM1 on 2026-11-08, identity `FM-1_5000`): it boots, plays in every
 mode and logged no crash. CPU load, output level and timing on the hardware are not measured yet. Phase is newer
-than that install and has run only in the host simulator. See
+than that install and has run only in the host simulator, and so has Piano. See
 `../../docs/research/fm1-firmware-development.md` for the route and its risks.
 
 ## How it is built
@@ -24,14 +24,16 @@ A shared core owns everything the modes have in common; each mode is one small f
 | `app.c` | The core: the engine hand-off, keys, the arpeggiator, MIDI, the panel, saving, the chooser |
 | `screen.c` | The shared screen: bands, drawing helpers, scene blit, tabs, value chips, pop-up, chooser |
 | `mode.h` | What a mode gives the core: its rows of settings, voice, effects, arpeggio, key notes, pages, screen |
-| `modes/iscream.c`, `modes/almanac.c`, `modes/woof.c`, `modes/phase.c` | Each mode's panel and screen |
+| `modes/iscream.c`, `modes/almanac.c`, `modes/woof.c`, `modes/phase.c`, `modes/piano.c` | Each mode's panel and screen |
 | `../iscream/dsp` | The engine (msfa FM voices, the six effects, voice allocation) and iScream's sundae recipes |
 | `../almanac/dsp`, `../woof/dsp` | Almanac's and Woof's C ports and their scenes (copies of the desktop's `scene.c`) |
 | `../phase/dsp` | Phase's pieces and sounds, the desktop's `process.c` as it is, and its player for the audio interrupt |
+| `../piano/dsp` | Piano's engine, tables and voicings: the desktop's `Sources/PianoCore`, copied unchanged |
 | `tests/basic.txt`, `tests/battery.txt` | The firmware in fm1-base's host simulator, through every mode and the chooser |
 
 All the modes share one scene buffer and one engine, so a mode costs only its own code and tables: the four need a
-225 KB image and 84 KB of RAM (of 98 KB); the three before Phase needed 211 KB and 83 KB.
+225 KB image and 84 KB of RAM (of 98 KB); the three before Phase needed 211 KB and 83 KB. Piano's measured tables
+bring the image to 264 KB and RAM to 86 KB; its engine's state (about 18 KB) is in the RAM pool.
 
 Phase is the one mode that plays notes of its own. Its player runs in the audio interrupt, before each of the engine's
 64-sample blocks (`block` in `mode.h`), so its timing never waits on the screen: a note sounds at most one block
@@ -39,9 +41,14 @@ Phase is the one mode that plays notes of its own. Its player runs in the audio 
 the core's note counts (`md_hold`, `md_let_go`), which the keys share, so a part letting go never cuts a key's note or
 another part's. Nothing is saved while it plays, as a flash write would silence it.
 
+Piano is the one mode with a sound of its own. It hands the core an instrument (`inst` in `mode.h`) that the audio
+interrupt plays in place of the FM voices, with the effects after it; every note, the pedal and MIDI reach it through
+the core, with velocity (the keys' from TOUCH, MIDI's its own). Its screen loop lowers the engine's budget of partials
+when the audio load passes 80% and raises it again below 50%.
+
 To add a mode: give it a C port and parity test of its own beside the others, a `modes/NAME.c` that fills in an
-`md_mode_t`, a store object at the end of the list in `app.h` (the next free pair of sectors below the others: Phase's
-is 0xD4000), and a place at the end of the list in `app.c`.
+`md_mode_t`, a store object at the end of the list in `app.h` (the next free pair of sectors below the others: Piano's
+is 0xD2000), and a place at the end of the list in `app.c`.
 
 ## Build and test
 

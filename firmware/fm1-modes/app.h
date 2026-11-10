@@ -12,8 +12,8 @@
 
 /* The settings (which mode ran last), the platform's panel calibration, then one object per mode. A new mode's object
  * goes on the end, so every object keeps its number from one release to the next. */
-enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_ALMANAC, OBJ_WOOF, OBJ_ISCREAM, OBJ_PHASE, OBJ_NOBJ };
-#define APP_STORE_MAP {0xFC000u, 0xDC000u, 0xDA000u, 0xD8000u, 0xD6000u, 0xD4000u}
+enum { OBJ_SETTINGS, OBJ_PANEL, OBJ_ALMANAC, OBJ_WOOF, OBJ_ISCREAM, OBJ_PHASE, OBJ_PIANO, OBJ_NOBJ };
+#define APP_STORE_MAP {0xFC000u, 0xDC000u, 0xDA000u, 0xD8000u, 0xD6000u, 0xD4000u, 0xD2000u}
 
 void app_init(void);
 void app_boot(void);

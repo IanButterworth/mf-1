@@ -144,6 +144,62 @@ static volatile uint32_t note_head, note_tail;
 static volatile int32_t pend_program = -1;
 static volatile float peak_level;
 
+/* The mode's own instrument, or none: the FM voices. Each call below goes to whichever plays. */
+static const md_instrument_t *volatile INST;
+static volatile int32_t pend_row[MD_FIELDS];
+static volatile uint8_t pend_inst_row;
+static volatile int8_t pend_sustain = -1;
+
+static void snd_on(int note, int vel)
+{
+    if (INST)
+        INST->note_on(note, vel);
+    else
+        isc_synth_note_on(note, vel);
+}
+
+static void snd_off(int note)
+{
+    if (INST)
+        INST->note_off(note);
+    else
+        isc_synth_note_off(note);
+}
+
+static void snd_sustain(int on)
+{
+    if (INST)
+        INST->sustain(on);
+    else
+        isc_synth_sustain(on);
+}
+
+static void snd_all_off(void)
+{
+    if (INST)
+        INST->all_off();
+    else
+        isc_synth_all_notes_off();
+}
+
+static void snd_block(float x[FM_N])
+{
+    if (INST) {
+        INST->block(x);
+        isc_fx_process(x, FM_N);
+    } else {
+        isc_synth_block(x);
+    }
+}
+
+static int snd_active(void) { return INST ? INST->active() : isc_synth_active_voices(); }
+static int snd_sounding(int note) { return INST ? INST->sounding(note) : isc_synth_sounding(note); }
+
+/* The sustain pedal from the panel, as MIDI controller 64 would press it. */
+static void md_sustain(int on) { pend_sustain = (int8_t)(on != 0); }
+
+static int key_velocity(void) { return M && M->velocity ? clamp(M->velocity(row), 1, 127) : KEY_VELOCITY; }
+
 static void engine_apply(void)
 {
     uint8_t voice[155];
@@ -159,6 +215,12 @@ static void engine_apply(void)
     pend.fx = fx;
     pend.pattern = pattern;
     pend_voice = pend_fx = pend_pattern = 1;
+    if (M->inst) {
+        int i;
+        for (i = 0; i < MD_FIELDS; i++)
+            pend_row[i] = row[i];
+        pend_inst_row = 1;
+    }
     plat_unlock(f);
 }
 
@@ -166,7 +228,7 @@ static void engine_note(int note, int on)
 {
     uint32_t f = plat_lock();
     if (note_head - note_tail < 64u) {
-        note_ring[note_head & 63u] = (uint16_t)(note | (on ? 0x100 : 0));
+        note_ring[note_head & 63u] = (uint16_t)(note | (on ? 0x100 | key_velocity() << 9 : 0));
         note_head++;
     }
     plat_unlock(f);
@@ -184,7 +246,7 @@ static void md_hold(int note, int strike)
 {
     note &= 127;
     if (strike || note_holds[note] == 0)
-        isc_synth_note_on(note, KEY_VELOCITY);
+        snd_on(note, KEY_VELOCITY);
     if (note_holds[note] < 255)
         note_holds[note]++;
 }
@@ -193,7 +255,7 @@ static void md_let_go(int note)
 {
     note &= 127;
     if (note_holds[note] && --note_holds[note] == 0)
-        isc_synth_note_off(note);
+        snd_off(note);
 }
 
 /* The arpeggiator player: MF-1's arpeggiator, run by the audio interrupt on the engine's 64-sample blocks. Held notes
@@ -220,7 +282,7 @@ static float arp_step_len(void)
 static void arp_release(void)
 {
     if (arp.off_note >= 0)
-        isc_synth_note_off(arp.off_note);
+        snd_off(arp.off_note);
     arp.off_note = -1;
 }
 
@@ -312,7 +374,7 @@ static void arp_block(void)
         int note = arp_next();
         if (note >= 0 && note <= 127) {
             arp_release();
-            isc_synth_note_on(note, KEY_VELOCITY);
+            snd_on(note, KEY_VELOCITY);
             arp.off_note = note;
             arp.off_left = gate - (float)FM_N > 64.f ? gate - (float)FM_N : 64.f;
         }
@@ -321,14 +383,14 @@ static void arp_block(void)
     arp.phase -= (float)FM_N;
 }
 
-static void play_note(int note, int on)
+static void play_note(int note, int on, int vel)
 {
     if (arp.cfg.on)
         arp_hold(note, on);
     else if (on)
-        isc_synth_note_on(note, KEY_VELOCITY);
+        snd_on(note, vel);
     else
-        isc_synth_note_off(note);
+        snd_off(note);
 }
 
 static void midi_in(void)
@@ -339,20 +401,17 @@ static void midi_in(void)
         uint32_t st = (pkt >> 8) & 0xF0u, d1 = (pkt >> 16) & 0x7Fu, d2 = (pkt >> 24) & 0x7Fu;
         switch (st) {
         case 0x90u:
-            if (d2)
-                play_note((int)d1, 1);
-            else
-                play_note((int)d1, 0);
+            play_note((int)d1, d2 != 0, (int)d2);
             break;
-        case 0x80u: play_note((int)d1, 0); break;
+        case 0x80u: play_note((int)d1, 0, 0); break;
         case 0xB0u:
             if (d1 == 64u)
-                isc_synth_sustain(d2 >= 64u);
+                snd_sustain(d2 >= 64u);
             else if (d1 == 1u)
                 isc_synth_mod_wheel((int)d2);
             else if (d1 == 120u || d1 == 123u) {
                 arp_reset();
-                isc_synth_all_notes_off();
+                snd_all_off();
             }
             break;
         case 0xD0u: isc_synth_aftertouch((int)d1); break;
@@ -369,7 +428,7 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     void (*block)(void) = mode_block;
     if (pend_panic) {
         arp_reset();
-        isc_synth_all_notes_off();
+        snd_all_off();
         pend_panic = 0;
     }
     if (pend_voice) {
@@ -379,6 +438,18 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
     if (pend_fx) {
         isc_synth_set_fx(&pend.fx);
         pend_fx = 0;
+    }
+    if (pend_inst_row && INST) {
+        int32_t r[MD_FIELDS];
+        int j;
+        for (j = 0; j < MD_FIELDS; j++)
+            r[j] = pend_row[j];
+        INST->apply(r);
+        pend_inst_row = 0;
+    }
+    if (pend_sustain >= 0) {
+        snd_sustain(pend_sustain);
+        pend_sustain = -1;
     }
     if (pend_pattern) {
         if (pend.pattern.on != arp.cfg.on)
@@ -394,7 +465,7 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
             else
                 md_let_go(e & 0x7F);
         } else {
-            play_note(e & 0x7F, (e & 0x100u) != 0);
+            play_note(e & 0x7F, (e & 0x100u) != 0, e >> 9);
         }
         note_tail++;
     }
@@ -404,7 +475,7 @@ void app_render(int32_t *lr, uint32_t n, uint32_t master_q12)
         arp_block();
         if (block)
             block();
-        isc_synth_block(x);
+        snd_block(x);
         for (k = 0; k < FM_N && i < n; k++, i++) {
             float s = x[k];
             float a = s < 0 ? -s : s;
@@ -436,7 +507,7 @@ static void key_down(uint32_t k)
         ui.key_notes[k][i] = (int8_t)notes[i];
         if (ui.note_refs[notes[i]]++ == 0) {
             engine_note(notes[i], 1);
-            plat_midi_send(0x09u | 0x90u << 8 | (uint32_t)notes[i] << 16 | (uint32_t)KEY_VELOCITY << 24, TO_USB);
+            plat_midi_send(0x09u | 0x90u << 8 | (uint32_t)notes[i] << 16 | (uint32_t)key_velocity() << 24, TO_USB);
         }
     }
 }
@@ -694,7 +765,7 @@ static void lights(void)
         lit |= 1u << B_OCTUP;
     for (k = 0; k < NKEYS; k++) {
         int note = 53 + k + 12 * octave;
-        if ((ui.keys >> k & 1u) || (note >= 0 && note < 128 && isc_synth_sounding(note)))
+        if ((ui.keys >> k & 1u) || (note >= 0 && note < 128 && snd_sounding(note)))
             keys |= 1u << k;
     }
     plat_lights(lit, keys, dim, 0, 1);
@@ -770,7 +841,7 @@ static void save_when_quiet(void)
 {
     stored_t *const st = &store_buf.st;
     int it, i;
-    if (!(dirty || global_dirty) || plat_ms() - changed_at < 1500u || isc_synth_active_voices() || ui.keys ||
+    if (!(dirty || global_dirty) || plat_ms() - changed_at < 1500u || snd_active() || ui.keys ||
         arp.running || (M->busy && M->busy()))
         return;
     if (global_dirty) {
@@ -822,6 +893,12 @@ static void start_mode(int i)
         global_dirty = 1;
         changed_at = plat_ms();
     }
+    if (M->inst) {
+        M->inst->start();
+        f = plat_lock();
+        INST = M->inst;
+        plat_unlock(f);
+    }
     engine_apply();
     if (M->start)
         M->start();
@@ -844,6 +921,9 @@ void app_init(void)
     dirty = global_dirty = 0;
     note_head = note_tail = 0;
     mode_block = 0;
+    INST = 0;
+    pend_inst_row = 0;
+    pend_sustain = -1;
     isc_memset(note_holds, 0, sizeof note_holds);
     pend_voice = pend_fx = pend_pattern = pend_panic = 0;
     pend_program = -1;
@@ -915,7 +995,7 @@ int app_expect(const char *what, int *got)
     else if (isc_streq(what, "low_battery"))
         *got = ui.low_battery;
     else if (isc_streq(what, "voices"))
-        *got = isc_synth_active_voices();
+        *got = snd_active();
     else if (isc_streq(what, "notes")) {          /* the notes the held keys play */
         int i;
         for (i = 0, *got = 0; i < 128; i++)
@@ -938,11 +1018,12 @@ int app_expect(const char *what, int *got)
 #include "modes/almanac.c"
 #include "modes/woof.c"
 #include "modes/phase.c"
+#include "modes/piano.c"
 
 /* The modes, in the chooser's order. A new mode goes on the end, with a store object of its own (app.h). */
 static const md_mode_t *const *modes(int *n)
 {
-    static const md_mode_t *const all[] = {&MODE_ISCREAM, &MODE_ALMANAC, &MODE_WOOF, &MODE_PHASE};
+    static const md_mode_t *const all[] = {&MODE_ISCREAM, &MODE_ALMANAC, &MODE_WOOF, &MODE_PHASE, &MODE_PIANO};
     *n = (int)(sizeof all / sizeof all[0]);
     return all;
 }

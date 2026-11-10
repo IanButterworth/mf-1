@@ -8,7 +8,8 @@ description: Build and test the modes firmware for the real FM-1 (firmware/fm1-m
 The firmware is `firmware/fm1-modes`, an app on fm1-base (`firmware/fm1-base`, a submodule pinned to a tested commit)
 and felucca-bsp (fm1-base's submodule), holding iScream, Almanac, Woof and Phase behind one shared core (`mode.h` is the
 interface). Its engine (`firmware/iscream/dsp`) is a C port of MF-1's; each mode's sound is a C port of the desktop's
-in `firmware/iscream/dsp`, `firmware/almanac/dsp`, `firmware/woof/dsp` and `firmware/phase/dsp`. Installing on a
+in `firmware/iscream/dsp`, `firmware/almanac/dsp`, `firmware/woof/dsp`, `firmware/phase/dsp` and
+`firmware/piano/dsp` (Piano has an engine of its own, in place of the FM voices). Installing on a
 device is the fm1-device skill's job, never this one's.
 
 ## One-time setup
@@ -46,6 +47,8 @@ Run all three after any change under `firmware/`, and the MF-1 suite too when `S
    - `firmware/phase/tests/run_parity.sh`: every value of every field gives the desktop's voice bytes and effects,
      and the firmware's player, run on 64-sample blocks, starts and releases the same notes as the desktop's player
      for every piece, within a block, through changes and a stop. It also checks the device's 64-bit divisions.
+   - `firmware/piano/tests/run_parity.sh`: the copied engine, tables and voicings match `Sources/PianoCore`, build as
+     C99 without warnings, and play every voicing bit for bit the same unoptimised and optimised.
    Each also fails when its generated tables or copied scene are stale.
 2. **Host simulator**: from `firmware/fm1-base`,
    `$PY tools/build.py ../fm1-modes --host`, then
@@ -76,7 +79,8 @@ Run all three after any change under `firmware/`, and the MF-1 suite too when `S
   `firmware/almanac/tools/gen_months.sh`. Woof: `firmware/woof/dsp/dogs.inc`, `scene.c` and `WoofCore.h` come from
   `Sources/WoofCore` by `firmware/woof/tools/gen_dogs.sh`. Phase: `firmware/phase/dsp/pieces.inc`, `process.c` and
   `PhaseCore.h` come from `Sources/PhaseCore` by `firmware/phase/tools/gen_pieces.sh`. Rerun them after any change
-  there, never edit by hand.
+  there, never edit by hand. Piano: everything in `firmware/piano/dsp` is copied from `Sources/PianoCore` by
+  `firmware/piano/tools/gen_piano.sh`.
 - A mode's panel and screen are `firmware/fm1-modes/modes/NAME.c`. Its static names share one unit with the core and
   the other modes: give them the mode's prefix.
 - A new mode: a C port and parity test of its own, a `modes/NAME.c` filling in an `md_mode_t`, a store object at the

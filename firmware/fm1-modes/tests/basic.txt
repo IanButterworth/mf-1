@@ -278,3 +278,57 @@ expect cell 5
 expect transpose -3
 expect playing 0
 expect page 1
+# C picks Piano: the Concert Grand, its own engine in place of the FM voices.
+key 11 down
+reboot
+wait 600
+expect chooser 1
+key 11 up
+wait 50
+tapkey 7
+wait 50
+expect chooser 0
+expect mode 4
+expect piano 0
+expect touch 80
+expect pedal 0
+# A key strikes a string: dozens of partials sound, and its damper stops them once the key is up.
+key 7 down
+wait 200
+expect partials 30
+key 7 up
+wait 1500
+expect partials 0
+# With PEDAL down a struck note rings on after its key.
+press GLO
+release GLO
+wait 30
+expect pedal 1
+tapkey 0
+wait 1000
+expect partials 22
+shot piano.png
+press GLO
+release GLO
+wait 1500
+expect pedal 0
+expect partials 0
+# PIANO steps the voicings; TOUCH changes how hard the keys play; SPACE steps the room.
+turn PRESET 3
+wait 50
+expect piano 3
+turn ALGO -4
+wait 50
+expect touch 66
+press FX
+release FX
+wait 30
+expect page 1
+shot piano_strings.png
+wait 3000
+expect dirty 0
+reboot
+wait 600
+expect mode 4
+expect piano 3
+expect touch 66

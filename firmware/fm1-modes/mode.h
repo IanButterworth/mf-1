@@ -35,6 +35,18 @@ typedef struct {
 } md_theme_t;
 
 typedef struct {
+    void (*start)(void);               /* in the screen loop, before the interrupt first calls it */
+    void (*apply)(const int32_t *row); /* the row's settings, after each change */
+    void (*note_on)(int note, int velocity);
+    void (*note_off)(int note);
+    void (*sustain)(int on);
+    void (*all_off)(void);
+    void (*block)(float out[64]);      /* the next 64 samples, before the effects */
+    int (*active)(void);               /* anything sounding */
+    int (*sounding)(int note);         /* a note's key or the pedal holds it */
+} md_instrument_t;
+
+typedef struct {
     const char *name;                  /* on the chooser */
     const char *reset_words;           /* "as composed": the pop-up after RESET */
     const char *reset_pill;            /* what that pop-up says instead, if set ("Fresh scoop") */
@@ -84,4 +96,9 @@ typedef struct {
     void (*block)(void);
     int (*busy)(void);                 /* it is playing notes of its own: nothing is saved meanwhile */
     uint32_t (*lit)(void);             /* buttons it lights fully */
+
+    /* A mode with a sound of its own (Piano) in place of the FM voices; the effects still follow it. The audio
+     * interrupt makes every call but start. */
+    const md_instrument_t *inst;
+    int (*velocity)(const int32_t *row);   /* how hard the keys play, which sense none; else the FM-1's default */
 } md_mode_t;
