@@ -332,3 +332,127 @@ wait 600
 expect mode 4
 expect piano 3
 expect touch 66
+# D picks Arpeggi: Ring of Five, stopped, its pool empty and the keys feeding it.
+key 11 down
+reboot
+wait 600
+expect chooser 1
+key 11 up
+wait 50
+tapkey 9
+wait 50
+expect chooser 0
+expect mode 5
+expect scene 0
+expect playing 0
+expect pool 0
+expect writes 1
+expect hold 2
+shot arpeggi.png
+# A key into the ring starts the lanes at once; its note sounds only as they play it.
+key 0 down
+wait 30
+expect playing 1
+expect pool 1
+expect notes 0
+expect releases >0
+key 0 up
+wait 100
+tapkey 2
+wait 100
+tapkey 4
+wait 100
+tapkey 5
+wait 100
+tapkey 7
+wait 100
+expect pool 5
+# The sixth key writes over the oldest: the ring stays at five, and the lanes play on.
+tapkey 9
+wait 1500
+expect pool 5
+expect playing 1
+expect voices >0
+shot arpeggi_ring.png
+# Nothing is saved while the lanes play; CLEAR empties the pool and lets go of every note.
+press SAVE
+release SAVE
+wait 30
+expect playing 0
+expect pool 0
+expect releases 0
+wait 2000
+expect voices 0
+# PLAY with an empty pool starts the scene's own chord. RELATION steps the relation; DUO takes B out and back.
+press PLAY
+release PLAY
+wait 1000
+expect playing 1
+expect pool 5
+turn ALGO 1
+wait 50
+expect relation 1
+press GLO
+release GLO
+wait 30
+expect duo 0
+press GLO
+release GLO
+wait 30
+expect duo 1
+# Another scene keeps the pool: Nebula's slow, overlapping notes in its hall.
+turn PRESET 2
+wait 2500
+expect scene 2
+expect pool 5
+expect playing 1
+shot arpeggi_nebula.png
+press PLAY
+release PLAY
+wait 30
+expect playing 0
+expect releases 0
+# HOLD steps Latch to Ring to Hold: then the lanes play only while keys are down.
+press EDIT
+release EDIT
+press EDIT
+release EDIT
+wait 30
+expect hold 0
+key 0 down
+key 4 down
+wait 600
+expect playing 1
+expect pool 2
+key 0 up
+key 4 up
+wait 30
+expect playing 0
+expect pool 0
+wait 4000
+expect releases 0
+# With WRITE off, the keys play along and leave the pool alone.
+press REC
+release REC
+wait 30
+expect writes 0
+key 7 down
+wait 100
+expect notes 1
+expect pool 0
+key 7 up
+press REC
+release REC
+wait 30
+expect held 0
+# The pad's notes fade for seconds after the last key; once nothing sounds, the scenes are saved.
+wait 10000
+expect voices 0
+expect dirty 0
+# Switched on again, it is Arpeggi as it was left, stopped.
+reboot
+wait 600
+expect mode 5
+expect scene 2
+expect hold 0
+expect playing 0

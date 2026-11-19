@@ -1,15 +1,15 @@
 ---
 name: fm1-firmware
-description: Build and test the modes firmware for the real FM-1 (firmware/fm1-modes on fm1-base: iScream, Almanac, Woof and Phase in one) - the parity tests against MF-1's engine and modes, the host simulator, the device build and its safety checks, regenerating the engine tables, and setting up the toolchain. Use whenever firmware/ code changes, before handing a package to the fm1-device skill, or when a firmware build fails.
+description: Build and test the modes firmware for the real FM-1 (firmware/fm1-modes on fm1-base: iScream, Almanac, Woof, Phase, Piano and Arpeggi in one) - the parity tests against MF-1's engine and modes, the host simulator, the device build and its safety checks, regenerating the engine tables, and setting up the toolchain. Use whenever firmware/ code changes, before handing a package to the fm1-device skill, or when a firmware build fails.
 ---
 
 # Building the FM-1 firmware
 
 The firmware is `firmware/fm1-modes`, an app on fm1-base (`firmware/fm1-base`, a submodule pinned to a tested commit)
-and felucca-bsp (fm1-base's submodule), holding iScream, Almanac, Woof and Phase behind one shared core (`mode.h` is the
+and felucca-bsp (fm1-base's submodule), holding iScream, Almanac, Woof, Phase, Piano and Arpeggi behind one shared core (`mode.h` is the
 interface). Its engine (`firmware/iscream/dsp`) is a C port of MF-1's; each mode's sound is a C port of the desktop's
-in `firmware/iscream/dsp`, `firmware/almanac/dsp`, `firmware/woof/dsp`, `firmware/phase/dsp` and
-`firmware/piano/dsp` (Piano has an engine of its own, in place of the FM voices). Installing on a
+in `firmware/iscream/dsp`, `firmware/almanac/dsp`, `firmware/woof/dsp`, `firmware/phase/dsp`,
+`firmware/arpeggi/dsp` and `firmware/piano/dsp` (Piano has an engine of its own, in place of the FM voices). Installing on a
 device is the fm1-device skill's job, never this one's.
 
 ## One-time setup
@@ -49,6 +49,9 @@ Run all three after any change under `firmware/`, and the MF-1 suite too when `S
      for every piece, within a block, through changes and a stop. It also checks the device's 64-bit divisions.
    - `firmware/piano/tests/run_parity.sh`: the copied engine, tables and voicings match `Sources/PianoCore`, build as
      C99 without warnings, and play every voicing bit for bit the same unoptimised and optimised.
+   - `firmware/arpeggi/tests/run_parity.sh`: as Phase's: every value of every field gives the desktop's voice bytes
+     and effects, and the firmware's player starts and releases the same notes as the desktop's for every scene and
+     a spread of shapes, rates, rhythms and relations, and through keys, rings, Hold, Latch, a tempo change and stops.
    Each also fails when its generated tables or copied scene are stale.
 2. **Host simulator**: from `firmware/fm1-base`,
    `$PY tools/build.py ../fm1-modes --host`, then
@@ -80,14 +83,19 @@ Run all three after any change under `firmware/`, and the MF-1 suite too when `S
   `Sources/WoofCore` by `firmware/woof/tools/gen_dogs.sh`. Phase: `firmware/phase/dsp/pieces.inc`, `process.c` and
   `PhaseCore.h` come from `Sources/PhaseCore` by `firmware/phase/tools/gen_pieces.sh`. Rerun them after any change
   there, never edit by hand. Piano: everything in `firmware/piano/dsp` is copied from `Sources/PianoCore` by
-  `firmware/piano/tools/gen_piano.sh`.
+  `firmware/piano/tools/gen_piano.sh`. Arpeggi: `firmware/arpeggi/dsp/scenes.inc`, `arp.c` and `ArpeggiCore.h` come
+  from `Sources/ArpeggiCore` by `firmware/arpeggi/tools/gen_scenes.sh`.
 - A mode's panel and screen are `firmware/fm1-modes/modes/NAME.c`. Its static names share one unit with the core and
   the other modes: give them the mode's prefix.
 - A new mode: a C port and parity test of its own, a `modes/NAME.c` filling in an `md_mode_t`, a store object at the
   end of the list in `app.h` (the next free pair of sectors below the others) and a place at the end of the list in
   `app.c`, and steps in `tests/basic.txt`.
-- A mode that plays notes of its own (Phase) runs its player in the audio interrupt through `md_mode_t.block`, and
-  reaches the engine only through `md_hold` and `md_let_go`, which count each note's holders with the keys.
+- A mode that plays notes of its own (Phase, Arpeggi) runs its player in the audio interrupt through
+  `md_mode_t.block`, and reaches the engine only through `md_hold` and `md_let_go`, which count each note's holders
+  with the keys. A mode whose keys feed its player instead of sounding (Arpeggi) returns no notes from `key_notes`
+  and hears the keys let go through `key_up`.
+- In the shared code a 64-bit division by a constant can become a 64-bit multiply by its reciprocal, which the
+  device build's check flags: divide through an out-of-line helper, as `arp.c` does.
 
 ## Rules the device build enforces, and some it does not
 

@@ -145,7 +145,7 @@ Licences matter when reading community code:
   `woof_tests.cc`, `phase_tests.cc`, `piano_tests.cc`, `arpeggi_tests.cc`), benchmark
   and WAV rendering through the offline C API.
 - `docs/research/`: the specs the emulation is built from.
-- `firmware/fm1-modes`: one firmware for the real FM-1 holding iScream, Almanac, Woof, Phase and Piano, chosen at power-on, on
+- `firmware/fm1-modes`: one firmware for the real FM-1 holding iScream, Almanac, Woof, Phase, Piano and Arpeggi, chosen at power-on, on
   fm1-base (`firmware/fm1-base`, a submodule). A shared core runs each mode through the interface in `mode.h`; each
   mode's panel and screen is `modes/NAME.c`. Its sound comes from the modes' C ports:
   - `firmware/iscream`: the engine, a C port of MF-1's kept bit for bit equal by `tests/run_parity.sh`, and
@@ -159,6 +159,9 @@ Licences matter when reading community code:
     and `tests/run_parity.sh`.
   - `firmware/piano`: copies of `Sources/PianoCore`'s C files. A change there needs `tools/gen_piano.sh` and
     `tests/run_parity.sh`.
+  - `firmware/arpeggi`: Arpeggi's scenes and sounds, a copy of ArpeggiCore's `arp.c`, and its player for the audio
+    interrupt. A change to ArpeggiCore (scenes, sounds, `arpeggi.cc`, `arp.c` or `player.cc`) needs
+    `tools/gen_scenes.sh` and `tests/run_parity.sh`.
   Build and test it with the `fm1-firmware` skill. Anything that touches a connected FM-1 goes through the `fm1-device` skill, which asks
   before every write.
 
