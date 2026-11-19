@@ -104,6 +104,17 @@ struct Finish {
                               knobCap: [Color(hex: 0xf0d995), Color(hex: 0xa98535)],
                               knobBump: [Color(hex: 0xfff2c6), Color(hex: 0x9b7a30)],
                               knobDot: Color(hex: 0x1c1b1a))
+
+    // Arpeggi's own finish: a midnight-violet case, lilac keys and dark knobs with an amber dot, like the night sky
+    // on its screen.
+    static let arpeggi = Finish(name: "Arpeggi", caseTop: Color(hex: 0x2b2550), caseBottom: Color(hex: 0x1b1738),
+                                keybed: Color(hex: 0xb9b0e6), tray: Color(hex: 0x151230),
+                                button: Color(hex: 0x3a3270), legend: Color(hex: 0xffffff), unlitLegend: Color(hex: 0x9a92cc),
+                                label: Color(hex: 0xd9d3ff), keyLabel: Color(hex: 0x4a4280), slit: Color(hex: 0x8d84c4),
+                                knobSkirt: [Color(hex: 0x3a3366), Color(hex: 0x14112a)],
+                                knobCap: [Color(hex: 0x2e2856), Color(hex: 0x121027)],
+                                knobBump: [Color(hex: 0x4d4585), Color(hex: 0x1d1a3a)],
+                                knobDot: Color(hex: 0xffb547))
 }
 
 extension Color {
