@@ -111,8 +111,8 @@ Licences matter when reading community code:
   the song library and the audio output list.
   - `PanelView` is generic over `PanelDriver` (`PanelDriver.swift`): `DeviceModel` drives MF-1,
     `IScreamModel` drives iScream. Anything new that the panel needs from its model goes on the protocol.
-  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`), Almanac, Woof, Phase and Piano are modes of the same app (View ›
-    iScream Mode and the rest, or `--iscream`, `--almanac`, `--woof`, `--phase` and `--piano`), picked at launch; `main.swift` picks the front end. Keep MF-1's behaviour unchanged when editing shared panel code,
+  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`), Almanac, Woof, Phase, Piano and Arpeggi are modes of the same app (View ›
+    iScream Mode and the rest, or `--iscream`, `--almanac`, `--woof`, `--phase`, `--piano` and `--arpeggi`), picked at launch; `main.swift` picks the front end. Keep MF-1's behaviour unchanged when editing shared panel code,
     and check both with `--snapshot`.
 - `Sources/IScreamCore` (C++17): iScream's flavors, how a sundae becomes an FM-1 voice and effects. It
   uses only the public C API and only what a real FM-1 has (see `docs/iscream.md`).
@@ -136,8 +136,13 @@ Licences matter when reading community code:
   (`mf1_set_instrument`); it is not an FM-1 patch, so the parity rule for patches does not apply to it, but the app
   and the firmware must render the same samples. Front end: `PianoModel`, `PianoScreen`, `PianoApp` (see
   `docs/piano.md`).
+- `Sources/ArpeggiCore` (C and C++17): Arpeggi's scenes and sounds, and `arp.c`, the pool (Hold, Latch, Ring) and the
+  two lanes' shapes, rhythms and relations in plain C, every note's time worked out from the elapsed ticks. Its
+  player (`player.cc`) works as Phase's does. `arp.c` needs no C library and makes every 64-bit product out of line,
+  so the firmware can build it as it is. Front end: `ArpeggiModel`, `ArpeggiScreen`, `ArpeggiApp`, and
+  `Finish.arpeggi` (see `docs/arpeggi.md`).
 - `Sources/mf1-render`: headless checks (`main.cc`, `tests_engine.cc`, `iscream_tests.cc`, `almanac_tests.cc`,
-  `woof_tests.cc`, `phase_tests.cc`, `piano_tests.cc`), benchmark
+  `woof_tests.cc`, `phase_tests.cc`, `piano_tests.cc`, `arpeggi_tests.cc`), benchmark
   and WAV rendering through the offline C API.
 - `docs/research/`: the specs the emulation is built from.
 - `firmware/fm1-modes`: one firmware for the real FM-1 holding iScream, Almanac, Woof, Phase and Piano, chosen at power-on, on

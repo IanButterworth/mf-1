@@ -74,16 +74,28 @@ let package = Package(
                 .unsafeFlags(["-O2", "-ffp-contract=off"]),
             ]
         ),
+        // Arpeggi: two arpeggiators playing one pool of notes, their patterns in plain C a firmware can run.
+        .target(
+            name: "ArpeggiCore",
+            dependencies: ["MF1Core"],
+            path: "Sources/ArpeggiCore",
+            cSettings: [
+                .unsafeFlags(["-O2"]),
+            ],
+            cxxSettings: [
+                .unsafeFlags(["-O2"]),
+            ]
+        ),
         .executableTarget(
             name: "MF1",
-            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore", "PhaseCore", "PianoCore",
+            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore", "PhaseCore", "PianoCore", "ArpeggiCore",
                            .product(name: "Sparkle", package: "Sparkle")],
             path: "Sources/MF1",
             resources: [.copy("Resources/Banks"), .copy("Resources/Fonts")]
         ),
         .executableTarget(
             name: "mf1-render",
-            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore", "PhaseCore", "PianoCore"],
+            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore", "PhaseCore", "PianoCore", "ArpeggiCore"],
             path: "Sources/mf1-render"
         ),
     ],

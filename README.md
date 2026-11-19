@@ -4,7 +4,7 @@ Two things for the M-VAVE FM-1 pocket FM synthesizer, sharing one engine:
 
 - **The MF-1 app**: a native macOS emulator of the FM-1. It has the same panel, screens, engine and MIDI/SysEx
   behaviour, so patches, librarians and workflows made for the FM-1 work with it. It also has
-  [iScream](#iscream), [Almanac](#almanac), [Woof](#woof), [Phase](#phase) and [Piano](#piano) modes.
+  [iScream](#iscream), [Almanac](#almanac), [Woof](#woof), [Phase](#phase), [Piano](#piano) and [Arpeggi](#arpeggi) modes.
 - **[The modes firmware](#firmware-for-the-fm-1)**: iScream, Almanac, Woof, Phase and Piano in one firmware on the FM-1 itself, in
   place of M-VAVE's firmware. Their engine renders the same samples as the app.
 
@@ -179,6 +179,15 @@ key's strings, the bass's longitudinal modes) and the knock of hammer and key on
 It plays by its own engine in place of the DX7 voices, plain C that the FM-1's firmware runs too. Eight voicings, from
 the concert grand as measured to a felt piano and a honky-tonk; MIDI velocity and the sustain pedal; the open grand on
 the screen, its strings glowing as they ring. See `docs/piano.md`.
+
+## Arpeggi
+
+View › Arpeggi Mode turns MF-1 into **Arpeggi**, two arpeggiators playing one pool of notes. Hold the keys, latch a
+chord, or fill a ring of a fixed size where each new key replaces the oldest, so a loop changes a note at a time.
+Each lane has its own shape (up, inward, a random walk, shuffled, strummed and more), rate down to fives and sevens
+to a beat, and rhythm (Euclidean, ratchets, a bouncing ball), and the two play together, alternate note by note,
+answer bar by bar, follow in canon, mirror or trade shapes. Eight scenes from bone dry to wide and echoing; the screen
+is a night sky the lanes draw on. Not yet in the modes firmware. See `docs/arpeggi.md`.
 
 ## Firmware for the FM-1
 

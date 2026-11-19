@@ -25,6 +25,9 @@ void woofWav(int dog, const char* path, int note, int argc, char** argv);
 void woofSceneSheet(const char* path, int place, int bark, int step);
 int phaseTests();
 int pianoTests();
+int arpeggiTests();
+void arpeggiReport(int note);
+void arpeggiWav(int scene, const char* path, double seconds);
 void phaseReport(int note);
 void phaseWav(int piece, const char* path, double seconds);
 void phaseJitter(double seconds);
@@ -845,6 +848,7 @@ int main(int argc, char** argv) {
     failed += woofTests();
     failed += phaseTests();
     failed += pianoTests();
+    failed += arpeggiTests();
     return failed ? 1 : 0;
   }
   if (mode == "almanac-weather" && argc >= 5) {
@@ -855,6 +859,16 @@ int main(int argc, char** argv) {
   if (mode == "woof-test") return woofTests() ? 1 : 0;
   if (mode == "phase-test") return phaseTests() ? 1 : 0;
   if (mode == "piano-test") return pianoTests() ? 1 : 0;
+  // arpeggi-report [note]; arpeggi-wav <scene 1-based> <out.wav> [seconds]
+  if (mode == "arpeggi-test") return arpeggiTests() ? 1 : 0;
+  if (mode == "arpeggi-report") {
+    arpeggiReport(argc > 3 ? atoi(argv[3]) : 60);
+    return 0;
+  }
+  if (mode == "arpeggi-wav" && argc >= 5) {
+    arpeggiWav(atoi(argv[3]) - 1, argv[4], argc > 5 ? atof(argv[5]) : 20);
+    return 0;
+  }
   // phase-report [note]; phase-wav <piece 1-based> <out.wav> [seconds]; phase-jitter [seconds]
   if (mode == "phase-report") {
     phaseReport(argc > 3 ? atoi(argv[3]) : 60);
