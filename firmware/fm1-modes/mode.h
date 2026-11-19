@@ -96,6 +96,8 @@ typedef struct {
     void (*block)(void);
     int (*busy)(void);                 /* it is playing notes of its own: nothing is saved meanwhile */
     uint32_t (*lit)(void);             /* buttons it lights fully */
+    void (*key_up)(int key);           /* a key let go, 0 the lowest, for a mode whose keys feed its player (Arpeggi) */
+    void (*save_press)(void);          /* a short press of SAVE, in place of the reminder to hold it */
 
     /* A mode with a sound of its own (Piano) in place of the FM voices; the effects still follow it. The audio
      * interrupt makes every call but start. */

@@ -516,6 +516,8 @@ static void key_down(uint32_t k)
 static void key_up(uint32_t k)
 {
     int i;
+    if (M->key_up)
+        M->key_up((int)k);
     for (i = 0; i < ui.key_count[k]; i++) {
         int note = ui.key_notes[k][i];
         if (ui.note_refs[note] && --ui.note_refs[note] == 0) {
@@ -696,7 +698,9 @@ static void input(void)
         ui.save_long = 1;
         reset_item();
     }
-    if (!(btn >> B_SAVE & 1u) && (ui.btn >> B_SAVE & 1u) && !ui.save_long) {
+    if (!(btn >> B_SAVE & 1u) && (ui.btn >> B_SAVE & 1u) && !ui.save_long && M->save_press) {
+        M->save_press();
+    } else if (!(btn >> B_SAVE & 1u) && (ui.btn >> B_SAVE & 1u) && !ui.save_long) {
         char t[48] = {0};
         text_cat(t, "Hold RESET for ");
         text_cat(t, M->reset_words);
@@ -1019,11 +1023,13 @@ int app_expect(const char *what, int *got)
 #include "modes/woof.c"
 #include "modes/phase.c"
 #include "modes/piano.c"
+#include "modes/arpeggi.c"
 
 /* The modes, in the chooser's order. A new mode goes on the end, with a store object of its own (app.h). */
 static const md_mode_t *const *modes(int *n)
 {
-    static const md_mode_t *const all[] = {&MODE_ISCREAM, &MODE_ALMANAC, &MODE_WOOF, &MODE_PHASE, &MODE_PIANO};
+    static const md_mode_t *const all[] = {&MODE_ISCREAM, &MODE_ALMANAC, &MODE_WOOF, &MODE_PHASE, &MODE_PIANO,
+                                           &MODE_ARPEGGI};
     *n = (int)(sizeof all / sizeof all[0]);
     return all;
 }

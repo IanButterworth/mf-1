@@ -112,7 +112,31 @@ pool, takes effect from the next strike.
   long it rings). They have not been auditioned on a real FM-1.
 - File › Export Sound Bank writes the eight scenes' sounds as an ordinary DX7 bank. The lanes and effects are not in
   it.
-- Not yet in the modes firmware. `arp.c` is written to be copied there unchanged.
+
+## On the FM-1
+
+Arpeggi is the sixth mode of the modes firmware (`firmware/fm1-modes`, D on the chooser). Its scenes and sounds are a
+C port (`firmware/arpeggi/dsp`), and its pool and lanes are this same `arp.c`, copied unchanged; that is why the file
+needs no C library, makes every 64-bit product out of line, and divides 64-bit numbers out of line too (a division by
+a constant would otherwise become a 64-bit multiply, which the FM-1's CPU can get wrong beside a memory load).
+`firmware/arpeggi/tests/run_parity.sh` checks every value of every field gives the desktop's voice bytes and effects,
+and that the firmware's player starts and releases the same notes as `player.cc` within one engine block: for every
+scene for a minute, for a spread of shapes, rates, rhythms and relations, and through keys filling and writing over a
+ring, Hold let go, a new Latch chord, a tempo change, a stop, a start and a clear.
+
+- **Where the player runs.** In the audio interrupt, before each of the engine's 64-sample blocks, as Phase's does.
+  The ticks are counted from the samples with an exact remainder (3584 × tempo ticks a block at 44.1 kHz). A key
+  that starts the clock is heard from the start of the next block. The cost on the FM-1 is not measured.
+- **The keys.** While WRITE is on they feed the pool and sound only as the lanes play them; the core calls the mode
+  when each key lets go, for Hold. A short press of CLEAR (SAVE) empties the pool and a long one puts the scene back
+  as written, as on the desktop.
+- **The screen.** The desktop's night sky drawn with the firmware's fills, in 80-row bands: the pool strip, the
+  streaks of the last 32 notes, the status, five tabs and the values. While the lanes play it draws frames back to
+  back. The fonts are the firmware's (Barlow).
+- **Saving.** The scenes' settings and whether the keys feed the arps are kept in a store object of Arpeggi's own.
+  The pool is not saved, as on the desktop. Nothing is saved while the lanes play.
+- Not on the FM-1: the bank export and the bank prompt, as the modes firmware takes no SysEx. It has run only in the
+  host simulator, not yet on a unit.
 
 ## Tools
 
