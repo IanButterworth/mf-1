@@ -86,16 +86,29 @@ let package = Package(
                 .unsafeFlags(["-O2"]),
             ]
         ),
+        // Rhymes: nursery rhymes to learn on the keys, its game, sounds and pictures in plain C a firmware can run.
+        .target(
+            name: "RhymesCore",
+            dependencies: ["MF1Core"],
+            path: "Sources/RhymesCore",
+            cSettings: [
+                .unsafeFlags(["-O2"]),
+            ],
+            cxxSettings: [
+                .unsafeFlags(["-O2"]),
+            ]
+        ),
         .executableTarget(
             name: "MF1",
-            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore", "PhaseCore", "PianoCore", "ArpeggiCore",
+            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore", "PhaseCore", "PianoCore", "ArpeggiCore", "RhymesCore",
                            .product(name: "Sparkle", package: "Sparkle")],
             path: "Sources/MF1",
             resources: [.copy("Resources/Banks"), .copy("Resources/Fonts")]
         ),
         .executableTarget(
             name: "mf1-render",
-            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore", "PhaseCore", "PianoCore", "ArpeggiCore"],
+            dependencies: ["MF1Core", "IScreamCore", "AlmanacCore", "WoofCore", "PhaseCore", "PianoCore", "ArpeggiCore",
+                           "RhymesCore"],
             path: "Sources/mf1-render"
         ),
     ],

@@ -4,8 +4,9 @@ Two things for the M-VAVE FM-1 pocket FM synthesizer, sharing one engine:
 
 - **The MF-1 app**: a native macOS emulator of the FM-1. It has the same panel, screens, engine and MIDI/SysEx
   behaviour, so patches, librarians and workflows made for the FM-1 work with it. It also has
-  [iScream](#iscream), [Almanac](#almanac), [Woof](#woof), [Phase](#phase), [Piano](#piano) and [Arpeggi](#arpeggi) modes.
-- **[The modes firmware](#firmware-for-the-fm-1)**: iScream, Almanac, Woof, Phase, Piano and Arpeggi in one firmware on the FM-1 itself, in
+  [iScream](#iscream), [Almanac](#almanac), [Woof](#woof), [Phase](#phase), [Piano](#piano), [Arpeggi](#arpeggi) and
+  [Rhymes](#rhymes) modes.
+- **[The modes firmware](#firmware-for-the-fm-1)**: iScream, Almanac, Woof, Phase, Piano, Arpeggi and Rhymes in one firmware on the FM-1 itself, in
   place of M-VAVE's firmware. Their engine renders the same samples as the app.
 
 <p>
@@ -189,11 +190,26 @@ to a beat, and rhythm (Euclidean, ratchets, a bouncing ball), and the two play t
 answer bar by bar, follow in canon, mirror or trade shapes. Eight scenes from bone dry to wide and echoing; the screen
 is a night sky the lanes draw on. The modes firmware runs it too. See `docs/arpeggi.md`.
 
+## Rhymes
+
+View › Rhymes Mode turns MF-1 into **Rhymes**, nursery rhymes for small children to learn on the keys. The key to play
+next lights up, and the screen shows its note as a coloured bead with the words under it and a little keyboard. A
+right key plays the next note and moves the song's picture on: buns come out of the oven, the lamb follows Mary to
+school, a star lights for every note of Twinkle, Twinkle. A finished song earns up to three stars, with confetti and a
+light show on the keys, then plays itself back in full with chords under the tune. Eleven traditional songs from Hot
+Cross Buns (three notes) to Happy Birthday, each with its own sound; three levels, from Magic (any key plays the next
+note) to Solo (the light helps only when the child waits); and LISTEN to hear a song first. The modes firmware runs it
+too, with the FM-1's own key lights. See `docs/rhymes.md`.
+
+![Rhymes mode: the sunny yellow panel with sky-blue keys, Twinkle, Twinkle's smiling star on the screen](docs/images/rhymes.jpg)
+
+![The eleven songs' screens mid-song, from the bakery of Hot Cross Buns to Happy Birthday's cake](docs/images/rhymes-songs.jpg)
+
 ## Firmware for the FM-1
 
-`firmware/fm1-modes` builds one firmware for the real FM-1 with iScream, Almanac, Woof, Phase, Piano and Arpeggi in it. Switch on and
+`firmware/fm1-modes` builds one firmware for the real FM-1 with iScream, Almanac, Woof, Phase, Piano, Arpeggi and Rhymes in it. Switch on and
 the last mode used starts; hold a piano key while switching on to choose another (F iScream, G Almanac, A Woof,
-B Phase, C Piano, D Arpeggi). It is an app on
+B Phase, C Piano, D Arpeggi, E Rhymes). It is an app on
 [fm1-base](https://github.com/charlesvestal/fm1-base) (a git submodule) and felucca-bsp. Its engine is a C port of
 MF-1's, and parity tests check that it renders the same samples as the app and that each mode gives the desktop's
 voices and effects. The modes share the engine, the panel code and the screen, so each new one costs little room. It

@@ -115,6 +115,17 @@ struct Finish {
                                 knobCap: [Color(hex: 0x2e2856), Color(hex: 0x121027)],
                                 knobBump: [Color(hex: 0x4d4585), Color(hex: 0x1d1a3a)],
                                 knobDot: Color(hex: 0xffb547))
+
+    // Rhymes' own finish: a sunny yellow case like a nursery toy, sky-blue keys whose white lights stand out, and
+    // coral buttons and knobs.
+    static let rhymes = Finish(name: "Rhymes", caseTop: Color(hex: 0xffd84d), caseBottom: Color(hex: 0xf4bf1e),
+                               keybed: Color(hex: 0x4f9fe0), tray: Color(hex: 0x3d86c6),
+                               button: Color(hex: 0xff6f61), legend: Color(hex: 0xffffff), unlitLegend: Color(hex: 0xffd2cc),
+                               label: Color(hex: 0x5a3e00), keyLabel: Color(hex: 0xd7ecff), slit: Color(hex: 0x2a5f8f),
+                               knobSkirt: [Color(hex: 0xff8a7a), Color(hex: 0xd94f40)],
+                               knobCap: [Color(hex: 0xff9e90), Color(hex: 0xe0584a)],
+                               knobBump: [Color(hex: 0xffc2b8), Color(hex: 0xe86a5c)],
+                               knobDot: Color(hex: 0xffffff))
 }
 
 extension Color {

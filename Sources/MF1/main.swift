@@ -1,8 +1,8 @@
 import SwiftUI
 
-// One binary, seven front ends: the MF-1 emulator and the iScream, Almanac, Woof, Phase, Piano and Arpeggi modes
-// (View › iScream Mode and the rest, or --iscream, --almanac, --woof, --phase, --piano and --arpeggi), each the same engine behind a
-// different face.
+// One binary, eight front ends: the MF-1 emulator and the iScream, Almanac, Woof, Phase, Piano, Arpeggi and Rhymes modes
+// (View › iScream Mode and the rest, or --iscream, --almanac, --woof, --phase, --piano, --arpeggi and --rhymes), each the
+// same engine behind a different face.
 Updates.start()
 switch Engine.mode {
 case .mf1: MF1App.main()
@@ -12,4 +12,5 @@ case .woof: WoofApp.main()
 case .phase: PhaseApp.main()
 case .piano: PianoApp.main()
 case .arpeggi: ArpeggiApp.main()
+case .rhymes: RhymesApp.main()
 }

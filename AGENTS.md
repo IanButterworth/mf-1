@@ -111,8 +111,9 @@ Licences matter when reading community code:
   the song library and the audio output list.
   - `PanelView` is generic over `PanelDriver` (`PanelDriver.swift`): `DeviceModel` drives MF-1,
     `IScreamModel` drives iScream. Anything new that the panel needs from its model goes on the protocol.
-  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`), Almanac, Woof, Phase, Piano and Arpeggi are modes of the same app (View ›
-    iScream Mode and the rest, or `--iscream`, `--almanac`, `--woof`, `--phase`, `--piano` and `--arpeggi`), picked at launch; `main.swift` picks the front end. Keep MF-1's behaviour unchanged when editing shared panel code,
+  - iScream (`IScreamModel`, `IScreamScreen`, `IScreamApp`), Almanac, Woof, Phase, Piano, Arpeggi and Rhymes are modes of the
+    same app (View › iScream Mode and the rest, or `--iscream`, `--almanac`, `--woof`, `--phase`, `--piano`, `--arpeggi` and
+    `--rhymes`), picked at launch; `main.swift` picks the front end. Keep MF-1's behaviour unchanged when editing shared panel code,
     and check both with `--snapshot`.
 - `Sources/IScreamCore` (C++17): iScream's flavors, how a sundae becomes an FM-1 voice and effects. It
   uses only the public C API and only what a real FM-1 has (see `docs/iscream.md`).
@@ -141,11 +142,16 @@ Licences matter when reading community code:
   player (`player.cc`) works as Phase's does. `arp.c` needs no C library and makes every 64-bit product out of line,
   so the firmware can build it as it is. Front end: `ArpeggiModel`, `ArpeggiScreen`, `ArpeggiApp`, and
   `Finish.arpeggi` (see `docs/arpeggi.md`).
+- `Sources/RhymesCore` (C and C++17): Rhymes' songs (`songs.c`, each tune and its words as text), the game and its
+  lights (`game.c`), the sounds (`voices.c`) and a picture for each song (`scene.c`), all plain C with no C library so
+  the firmware can build them. `rhymes.cc` installs the sounds and runs the game on a thread of its own, which plays
+  a song listened to and the fanfare at their exact times. Front end: `RhymesModel`, `RhymesScreen`, `RhymesApp`, and
+  `Finish.rhymes` (see `docs/rhymes.md`). Songs must be traditional and in the public domain.
 - `Sources/mf1-render`: headless checks (`main.cc`, `tests_engine.cc`, `iscream_tests.cc`, `almanac_tests.cc`,
-  `woof_tests.cc`, `phase_tests.cc`, `piano_tests.cc`, `arpeggi_tests.cc`), benchmark
+  `woof_tests.cc`, `phase_tests.cc`, `piano_tests.cc`, `arpeggi_tests.cc`, `rhymes_tests.cc`), benchmark
   and WAV rendering through the offline C API.
 - `docs/research/`: the specs the emulation is built from.
-- `firmware/fm1-modes`: one firmware for the real FM-1 holding iScream, Almanac, Woof, Phase, Piano and Arpeggi, chosen at power-on, on
+- `firmware/fm1-modes`: one firmware for the real FM-1 holding iScream, Almanac, Woof, Phase, Piano, Arpeggi and Rhymes, chosen at power-on, on
   fm1-base (`firmware/fm1-base`, a submodule). A shared core runs each mode through the interface in `mode.h`; each
   mode's panel and screen is `modes/NAME.c`. Its sound comes from the modes' C ports:
   - `firmware/iscream`: the engine, a C port of MF-1's kept bit for bit equal by `tests/run_parity.sh`, and
@@ -162,6 +168,8 @@ Licences matter when reading community code:
   - `firmware/arpeggi`: Arpeggi's scenes and sounds, a copy of ArpeggiCore's `arp.c`, and its player for the audio
     interrupt. A change to ArpeggiCore (scenes, sounds, `arpeggi.cc`, `arp.c` or `player.cc`) needs
     `tools/gen_scenes.sh` and `tests/run_parity.sh`.
+  - `firmware/rhymes`: copies of `Sources/RhymesCore`'s C files. A change there needs `tools/gen_rhymes.sh` and
+    `tests/run_parity.sh`.
   Build and test it with the `fm1-firmware` skill. Anything that touches a connected FM-1 goes through the `fm1-device` skill, which asks
   before every write.
 

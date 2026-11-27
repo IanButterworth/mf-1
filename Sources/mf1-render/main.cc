@@ -26,6 +26,8 @@ void woofSceneSheet(const char* path, int place, int bark, int step);
 int phaseTests();
 int pianoTests();
 int arpeggiTests();
+int rhymesTests();
+void rhymesSheet(const char* path);
 void arpeggiReport(int note);
 void arpeggiWav(int scene, const char* path, double seconds);
 void phaseReport(int note);
@@ -849,6 +851,7 @@ int main(int argc, char** argv) {
     failed += phaseTests();
     failed += pianoTests();
     failed += arpeggiTests();
+    failed += rhymesTests();
     return failed ? 1 : 0;
   }
   if (mode == "almanac-weather" && argc >= 5) {
@@ -861,6 +864,12 @@ int main(int argc, char** argv) {
   if (mode == "piano-test") return pianoTests() ? 1 : 0;
   // arpeggi-report [note]; arpeggi-wav <scene 1-based> <out.wav> [seconds]
   if (mode == "arpeggi-test") return arpeggiTests() ? 1 : 0;
+  // rhymes-test; rhymes-sheet <out.rgb>: every song's picture at the start, half way and finished
+  if (mode == "rhymes-test") return rhymesTests() ? 1 : 0;
+  if (mode == "rhymes-sheet" && argc >= 4) {
+    rhymesSheet(argv[3]);
+    return 0;
+  }
   if (mode == "arpeggi-report") {
     arpeggiReport(argc > 3 ? atoi(argv[3]) : 60);
     return 0;
