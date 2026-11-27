@@ -228,14 +228,15 @@ static void draw_chooser(void)
     fill(0, band_y, 240, BAND_H, 0x15171Cu);
     text_at(120, 10, &FONT_M, "CHOOSE A MODE", 0xF4F0E6u, 1);
     text_at(120, 38, &FONT_T, ui.chooser_wait ? "Let go of the keys" : "Press the key under its name", 0x9AA0AAu, 1);
+    /* rows close enough that all eight the chooser's keys allow fit on the screen */
     for (i = 0; i < n && i < 8; i++) {
-        int32_t y = 62 + i * 30;
+        int32_t y = 56 + i * 23;
         char name[24];
         upper(all[i]->name, name, sizeof name);
-        fill(20, y, 200, 26, 0x262A33u);
-        fill(20, y, 30, 26, 0xF4F0E6u);
-        text_at(35, y + 5, &FONT_B, CHOOSER_NOTE[i], 0x15171Cu, 1);
-        text_at(60, y + 5, &FONT_B, name, 0xF4F0E6u, 0);
+        fill(20, y, 200, 21, 0x262A33u);
+        fill(20, y, 30, 21, 0xF4F0E6u);
+        text_at(35, y + 2, &FONT_B, CHOOSER_NOTE[i], 0x15171Cu, 1);
+        text_at(60, y + 2, &FONT_B, name, 0xF4F0E6u, 0);
     }
     draw_battery(207, 9, 1, 0xF4F0E6u);
 }

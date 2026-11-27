@@ -1,20 +1,21 @@
 # MF-1's modes on the FM-1
 
-One firmware for the M-VAVE FM-1 that runs MF-1's modes: iScream, Almanac, Woof, Phase, Piano and Arpeggi. It
+One firmware for the M-VAVE FM-1 that runs MF-1's modes: iScream, Almanac, Woof, Phase, Piano, Arpeggi and Rhymes. It
 is an app on
 [fm1-base](https://github.com/charlesvestal/fm1-base) (the `../fm1-base` submodule) and felucca-bsp.
 
 - **Choosing a mode:** switch on normally and the last mode used starts (iScream the first time). Hold any piano key
   while switching on for the chooser, let go, then press the key under a mode's name: F for iScream, G for Almanac,
-  A for Woof, B for Phase, C for Piano, D for Arpeggi.
+  A for Woof, B for Phase, C for Piano, D for Arpeggi, E for Rhymes.
 - **Settings:** each mode keeps its own, in a store object of its own, so switching loses nothing.
 - **Battery:** the bars show the FM-1's own reading, with LOW BATTERY over the screen at the last bar.
 
 It has run on one unit (installed through TransitFM1 on 2026-11-08, identity `FM-1_5000`): it boots, plays in every
-mode and logged no crash. CPU load, output level and timing on the hardware are not measured yet. Phase is newer
-than that install and has run only in the host simulator, as has Arpeggi. Piano has run on the unit since
-2026-11-10 (below). See
-`../../docs/research/fm1-firmware-development.md` for the route and its risks.
+mode and logged no crash. CPU load, output level and timing on the hardware are not measured yet. Phase is newer than
+that install and has run only in the host simulator, as has Arpeggi. Rhymes has been installed on the unit
+(2026-11-27) and starts there; the chooser fix that lists it as the seventh mode has run only in the host simulator.
+Piano has run on the unit since 2026-11-10 (below). See `../../docs/research/fm1-firmware-development.md` for the
+route and its risks.
 
 ## How it is built
 
@@ -26,18 +27,19 @@ A shared core owns everything the modes have in common; each mode is one small f
 | `app.c` | The core: the engine hand-off, keys, the arpeggiator, MIDI, the panel, saving, the chooser |
 | `screen.c` | The shared screen: bands, drawing helpers, scene blit, tabs, value chips, pop-up, chooser |
 | `mode.h` | What a mode gives the core: its rows of settings, voice, effects, arpeggio, key notes, pages, screen |
-| `modes/iscream.c`, `modes/almanac.c`, `modes/woof.c`, `modes/phase.c`, `modes/piano.c`, `modes/arpeggi.c` | Each mode's panel and screen |
+| `modes/iscream.c`, `modes/almanac.c`, `modes/woof.c`, `modes/phase.c`, `modes/piano.c`, `modes/arpeggi.c`, `modes/rhymes.c` | Each mode's panel and screen |
 | `../iscream/dsp` | The engine (msfa FM voices, the six effects, voice allocation) and iScream's sundae recipes |
 | `../almanac/dsp`, `../woof/dsp` | Almanac's and Woof's C ports and their scenes (copies of the desktop's `scene.c`) |
 | `../phase/dsp` | Phase's pieces and sounds, the desktop's `process.c` as it is, and its player for the audio interrupt |
 | `../piano/dsp` | Piano's engine, tables and voicings: the desktop's `Sources/PianoCore`, copied unchanged |
 | `../arpeggi/dsp` | Arpeggi's scenes and sounds, the desktop's `arp.c` as it is, and its player for the audio interrupt |
+| `../rhymes/dsp` | Rhymes' songs, game, sounds and pictures: the desktop's `Sources/RhymesCore`, copied unchanged |
 | `tests/basic.txt`, `tests/battery.txt` | The firmware in fm1-base's host simulator, through every mode and the chooser |
 
 All the modes share one scene buffer and one engine, so a mode costs only its own code and tables: the four need a
 225 KB image and 84 KB of RAM (of 98 KB); the three before Phase needed 211 KB and 83 KB. Piano's measured tables
 bring the image to 264 KB and RAM to 86 KB; its engine's state (about 18 KB) is in the RAM pool. Arpeggi brings them
-to 282 KB and 89 KB.
+to 282 KB and 89 KB, and Rhymes to 341 KB and 91 KB.
 
 Phase and Arpeggi play notes of their own. Phase's player runs in the audio interrupt, before each of the engine's
 64-sample blocks (`block` in `mode.h`), so its timing never waits on the screen: a note sounds at most one block
@@ -47,6 +49,11 @@ another part's. Nothing is saved while it plays, as a flash write would silence 
 way; its keys feed the player's pool instead of sounding (`key_notes` returns none, and `key_up` tells the mode a key
 let go), and a short press of SAVE clears the pool (`save_press`).
 
+Rhymes lights the keys itself: the next key of the song, blinking, and a light show when a song is finished, in place
+of the notes sounding (`key_lights` in `mode.h`). Its keys go to its game, which plays the next note for the right key
+and nothing for a wrong one, and SELECT moves between a song's lines (`select`). Its listened songs and fanfare play in
+the audio interrupt, through the same note counts as Phase's parts.
+
 Piano is the one mode with a sound of its own. It hands the core an instrument (`inst` in `mode.h`) that the audio
 interrupt plays in place of the FM voices, with the effects after it; every note, the pedal and MIDI reach it through
 the core, with velocity (the keys' from TOUCH, MIDI's its own). Its screen loop lowers the engine's budget of partials
@@ -55,7 +62,7 @@ in `fm1.toml`) so that Piano can give the speaker, and only the speaker, a 160 H
 
 To add a mode: give it a C port and parity test of its own beside the others, a `modes/NAME.c` that fills in an
 `md_mode_t`, a store object at the end of the list in `app.h` (the next free pair of sectors below the others: Piano's
-is 0xD2000, Arpeggi's 0xD0000), and a place at the end of the list in `app.c`.
+is 0xD2000, Arpeggi's 0xD0000, Rhymes' 0xCE000), and a place at the end of the list in `app.c`.
 
 ## Build and test
 

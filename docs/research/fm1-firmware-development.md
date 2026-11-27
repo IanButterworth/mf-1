@@ -128,6 +128,15 @@ package SHA-256 `a7fd5a06…`, then `ff1097e1…`. Both boot to `FM-1_5000`, pla
   output while the speaker plays, from fm1-base's jack reading (`plat_headphones`, PB5) [measured on the Mac].
 - Not yet measured: the audio load with 384 partials (`plat_cpu_pct` would give it) and how the speaker sounds now.
 
+### Rhymes on the unit (2026-11-27)
+
+The modes firmware with Rhymes as the seventh mode, installed three times through TransitFM1 (classic installs, exit 0
+each): package SHA-256 `298345ca…`, then `a29fb148…` (larger screen and pictures). Each reported `FM-1_5000` after the
+install. On the unit the chooser did not show Rhymes: its rows were 30 pixels apart from y 62, so a seventh fell below
+the 240-pixel screen [observed]. The chooser now spaces its rows 23 pixels apart from y 56, so eight fit; that build
+(`f8379e7d…`) has run in the host simulator. Not yet measured: the audio load of an encore (the tune and a three-note
+chord at once) and how the sounds and the key lights look and sound on the hardware.
+
 ## Sources
 
 - awesome-fm-1: https://github.com/cicloid/awesome-fm-1 (index; recovery and development sections)

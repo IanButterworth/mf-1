@@ -98,6 +98,8 @@ typedef struct {
     uint32_t (*lit)(void);             /* buttons it lights fully */
     void (*key_up)(int key);           /* a key let go, 0 the lowest, for a mode whose keys feed its player (Arpeggi) */
     void (*save_press)(void);          /* a short press of SAVE, in place of the reminder to hold it */
+    uint32_t (*key_lights)(uint32_t *dim);  /* the keys to light, fully and dimly, in place of the notes sounding */
+    int (*select)(int delta);          /* a turn of SELECT the mode handles itself: nonzero if it did */
 
     /* A mode with a sound of its own (Piano) in place of the FM voices; the effects still follow it. The audio
      * interrupt makes every call but start. */

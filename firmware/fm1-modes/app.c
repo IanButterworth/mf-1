@@ -724,7 +724,10 @@ static void input(void)
             continue;
         ui.touched_at = now;
         switch (k) {
-        case EN_SELECT: set_page(clamp(page + (e > 0 ? 1 : -1), 0, M->npages - 1)); break;
+        case EN_SELECT:
+            if (!M->select || !M->select(e > 0 ? 1 : -1))
+                set_page(clamp(page + (e > 0 ? 1 : -1), 0, M->npages - 1));
+            break;
         case EN_PRESET: select_item(item() + (e > 0 ? 1 : -1)); break;
         case EN_ALGO:
             set_field(M->algo_field, value(M->algo_field) + (e > 0 ? 1 : -1));
@@ -747,7 +750,7 @@ static void input(void)
 
 static void lights(void)
 {
-    uint32_t lit = 0, dim = 0, keys = 0, b;
+    uint32_t lit = 0, dim = 0, keys = 0, dim_keys = 0, b;
     int k;
     if (ui.chooser) {
         int n;
@@ -767,12 +770,16 @@ static void lights(void)
         lit |= 1u << B_OCTDN;
     if (octave > 0)
         lit |= 1u << B_OCTUP;
-    for (k = 0; k < NKEYS; k++) {
-        int note = 53 + k + 12 * octave;
-        if ((ui.keys >> k & 1u) || (note >= 0 && note < 128 && snd_sounding(note)))
-            keys |= 1u << k;
+    if (M->key_lights) {
+        keys = M->key_lights(&dim_keys) | ui.keys;
+    } else {
+        for (k = 0; k < NKEYS; k++) {
+            int note = 53 + k + 12 * octave;
+            if ((ui.keys >> k & 1u) || (note >= 0 && note < 128 && snd_sounding(note)))
+                keys |= 1u << k;
+        }
     }
-    plat_lights(lit, keys, dim, 0, 1);
+    plat_lights(lit, keys, dim, dim_keys & ~keys, 1);
 }
 
 /* ------------------------------------------------------------------ keeping each mode's items */
@@ -1024,12 +1031,13 @@ int app_expect(const char *what, int *got)
 #include "modes/phase.c"
 #include "modes/piano.c"
 #include "modes/arpeggi.c"
+#include "modes/rhymes.c"
 
 /* The modes, in the chooser's order. A new mode goes on the end, with a store object of its own (app.h). */
 static const md_mode_t *const *modes(int *n)
 {
     static const md_mode_t *const all[] = {&MODE_ISCREAM, &MODE_ALMANAC, &MODE_WOOF, &MODE_PHASE, &MODE_PIANO,
-                                           &MODE_ARPEGGI};
+                                           &MODE_ARPEGGI, &MODE_RHYMES};
     *n = (int)(sizeof all / sizeof all[0]);
     return all;
 }

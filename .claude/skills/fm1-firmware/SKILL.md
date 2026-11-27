@@ -1,12 +1,12 @@
 ---
 name: fm1-firmware
-description: Build and test the modes firmware for the real FM-1 (firmware/fm1-modes on fm1-base: iScream, Almanac, Woof, Phase, Piano and Arpeggi in one) - the parity tests against MF-1's engine and modes, the host simulator, the device build and its safety checks, regenerating the engine tables, and setting up the toolchain. Use whenever firmware/ code changes, before handing a package to the fm1-device skill, or when a firmware build fails.
+description: Build and test the modes firmware for the real FM-1 (firmware/fm1-modes on fm1-base: iScream, Almanac, Woof, Phase, Piano, Arpeggi and Rhymes in one) - the parity tests against MF-1's engine and modes, the host simulator, the device build and its safety checks, regenerating the engine tables, and setting up the toolchain. Use whenever firmware/ code changes, before handing a package to the fm1-device skill, or when a firmware build fails.
 ---
 
 # Building the FM-1 firmware
 
 The firmware is `firmware/fm1-modes`, an app on fm1-base (`firmware/fm1-base`, a submodule pinned to a tested commit)
-and felucca-bsp (fm1-base's submodule), holding iScream, Almanac, Woof, Phase, Piano and Arpeggi behind one shared core (`mode.h` is the
+and felucca-bsp (fm1-base's submodule), holding iScream, Almanac, Woof, Phase, Piano, Arpeggi and Rhymes behind one shared core (`mode.h` is the
 interface). Its engine (`firmware/iscream/dsp`) is a C port of MF-1's; each mode's sound is a C port of the desktop's
 in `firmware/iscream/dsp`, `firmware/almanac/dsp`, `firmware/woof/dsp`, `firmware/phase/dsp`,
 `firmware/arpeggi/dsp` and `firmware/piano/dsp` (Piano has an engine of its own, in place of the FM voices). Installing on a
@@ -52,6 +52,9 @@ Run all three after any change under `firmware/`, and the MF-1 suite too when `S
    - `firmware/arpeggi/tests/run_parity.sh`: as Phase's: every value of every field gives the desktop's voice bytes
      and effects, and the firmware's player starts and releases the same notes as the desktop's for every scene and
      a spread of shapes, rates, rhythms and relations, and through keys, rings, Hold, Latch, a tempo change and stops.
+   - `firmware/rhymes/tests/run_parity.sh`: as Piano's: the copied songs, game, sounds and pictures match
+     `Sources/RhymesCore`, build as C99 without warnings, and play, light and draw every song the same unoptimised
+     and optimised.
    Each also fails when its generated tables or copied scene are stale.
 2. **Host simulator**: from `firmware/fm1-base`,
    `$PY tools/build.py ../fm1-modes --host`, then
@@ -84,7 +87,8 @@ Run all three after any change under `firmware/`, and the MF-1 suite too when `S
   `PhaseCore.h` come from `Sources/PhaseCore` by `firmware/phase/tools/gen_pieces.sh`. Rerun them after any change
   there, never edit by hand. Piano: everything in `firmware/piano/dsp` is copied from `Sources/PianoCore` by
   `firmware/piano/tools/gen_piano.sh`. Arpeggi: `firmware/arpeggi/dsp/scenes.inc`, `arp.c` and `ArpeggiCore.h` come
-  from `Sources/ArpeggiCore` by `firmware/arpeggi/tools/gen_scenes.sh`.
+  from `Sources/ArpeggiCore` by `firmware/arpeggi/tools/gen_scenes.sh`. Rhymes: everything in `firmware/rhymes/dsp` is
+  copied from `Sources/RhymesCore` by `firmware/rhymes/tools/gen_rhymes.sh`.
 - A mode's panel and screen are `firmware/fm1-modes/modes/NAME.c`. Its static names share one unit with the core and
   the other modes: give them the mode's prefix.
 - A new mode: a C port and parity test of its own, a `modes/NAME.c` filling in an `md_mode_t`, a store object at the

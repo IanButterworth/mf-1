@@ -456,3 +456,120 @@ expect mode 5
 expect scene 2
 expect hold 0
 expect playing 0
+# E picks Rhymes: Hot Cross Buns at Guide, ready, its first key (E4) lit.
+key 0 down
+reboot
+wait 600
+expect chooser 1
+key 0 up
+wait 50
+# every mode is on the chooser, Rhymes the seventh at the bottom
+shot chooser_all.png
+tapkey 11
+wait 50
+expect chooser 0
+expect mode 6
+expect song 0
+expect level 1
+expect state 0
+expect next_key 12
+expect next_lit 12
+shot rhymes.png
+# A wrong key is silent and the song waits; the lit key plays the next note and moves on.
+key 0 down
+wait 50
+expect notes 0
+expect voices 0
+expect pos 0
+expect misses 1
+key 0 up
+key 11 down
+wait 50
+expect notes 1
+expect pos 1
+expect state 1
+key 11 up
+wait 200
+expect next_lit 10
+# The rest of the song: D C, E D C, C C C C, D D D D, E D C.
+tapkey 9
+wait 120
+tapkey 7
+wait 120
+tapkey 11
+wait 120
+tapkey 9
+wait 120
+tapkey 7
+wait 120
+tapkey 7
+wait 120
+tapkey 7
+wait 120
+tapkey 7
+wait 120
+tapkey 7
+wait 120
+tapkey 9
+wait 120
+tapkey 9
+wait 120
+tapkey 9
+wait 120
+tapkey 9
+wait 120
+tapkey 11
+wait 120
+tapkey 9
+wait 120
+tapkey 7
+wait 900
+expect state 2
+expect stars 3
+expect voices >0
+shot rhymes_done.png
+# Then the whole song plays again with its chords, and after it the song is ready again from the start.
+wait 3500
+expect state 4
+expect voices >0
+shot rhymes_encore.png
+wait 13000
+expect state 0
+expect pos 0
+# LISTEN plays the song through with its keys lit; a key stops it and starts playing.
+tap PLAY
+wait 1500
+expect state 3
+expect voices >0
+shot rhymes_listen.png
+tapkey 11
+wait 50
+expect state 1
+expect pos 1
+# LINE moves to the next line; MAGIC lets any key play the next note; AGAIN starts again.
+turn SELECT 1
+wait 100
+expect pos 6
+tap FX
+wait 30
+expect level 0
+tapkey 26
+wait 50
+expect pos 7
+tap SAVE
+wait 30
+expect pos 0
+# Twinkle, Twinkle: its own picture and the music box.
+turn PRESET 3
+wait 300
+expect song 3
+expect sound 3
+expect next_key 8
+shot rhymes_twinkle.png
+wait 3000
+expect dirty 0
+reboot
+wait 600
+expect mode 6
+expect song 3
+expect level 1
